@@ -48,6 +48,8 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
     juce_add_plugin(Humline
         COMPANY_NAME              "Codebuff"
         BUNDLE_ID                 "com.codebuff.humline"
+        ICON_BIG                  "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon-1024.png"
+        ICON_SMALL                "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon-256.png"
         PLUGIN_MANUFACTURER_CODE  Cdbx
         PLUGIN_CODE               Hmln
         PRODUCT_NAME              "Humline"
