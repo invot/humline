@@ -7,6 +7,23 @@ notes on the grid, in the key you choose; beatbox and it becomes drums.
 Built with JUCE. The analysis core is plain C++ with no JUCE dependency, so it
 can be unit-tested from a console binary.
 
+![Humline's Play page: the note wheel, trigger pads, grid controls and keyboard](docs/screenshots/play.png)
+
+## Screenshots
+
+| | |
+|:---:|:---:|
+| ![Train page](docs/screenshots/train.png) | ![Key page](docs/screenshots/key.png) |
+| **Train**: record takes for each trigger and pick the drum note it plays | **Key**: notes picked on the wheel, with suggested keys |
+| ![Chords page](docs/screenshots/chords.png) | ![Notes page](docs/screenshots/notes.png) |
+| **Chords**: the chord mapped to each degree of the key | **Notes**: the last take, ready to drag out or save as `.mid` |
+| ![Assign page](docs/screenshots/assign.png) | ![Add a synth screen](docs/screenshots/no-instrument.png) |
+| **Assign**: MIDI channels, pitch bend and the vowel/dynamics CC dials | **No instrument**: shown until a synth or drum kit answers |
+
+The screenshots are rendered by `HumlineSmoke` (see [Tests](#tests)). To
+regenerate them, run it with `HUMLINE_SNAPSHOT_DIR` set to a folder and copy
+the PNGs it writes into `docs/screenshots/`.
+
 ## What it does
 
 **The attached instrument sets the mode**
@@ -282,3 +299,12 @@ Tests/smoke.cpp  processor + editor smoke test
   the plugin on the track, so the DAW records its MIDI output directly. There is
   no in-plugin clip to drag out, and no "updated key" suggestion after a take.
 - More than 8 triggers: the pads are a fixed set of 8.
+
+## Licence
+
+Humline is released under the **GNU Affero General Public License v3.0 or later**
+(AGPL-3.0-or-later) — see [LICENSE](LICENSE). This is the licence JUCE 8 itself is
+distributed under for open-source use: JUCE is dual-licensed as AGPLv3 or a paid
+JUCE licence, so building and shipping Humline under AGPLv3 costs nothing. To ship
+closed-source binaries instead you need a JUCE licence (the free Starter tier
+covers up to $20,000 annual revenue) and a different licence for this code.
