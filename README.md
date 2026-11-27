@@ -1,0 +1,284 @@
+# Humline — vocal / beatbox → MIDI
+
+A VST3 plugin (plus a standalone app) that listens to a microphone, and writes
+quantised MIDI out of the track: sing a melody or a bass line and it becomes
+notes on the grid, in the key you choose; beatbox and it becomes drums.
+
+Built with JUCE. The analysis core is plain C++ with no JUCE dependency, so it
+can be unit-tested from a console binary.
+
+## What it does
+
+**The attached instrument sets the mode**
+- Humline makes no sound of its own. It drives an instrument through its MIDI
+  out, and the mode follows what that instrument is:
+  - **Instrument** (a synth, keys, a bass): singing becomes notes and chords.
+    Drums are not listened for, so nothing waits on a drum-or-note decision. A
+    note goes out about 40 ms after you start singing it, snapped into the key,
+    and stops as soon as you stop singing.
+  - **Drum kit**: every sound is a drum. A hit is classified about 10 ms after
+    its peak, and its MIDI note goes out about 20 ms after the hit.
+  - **Nothing attached**: Humline sends no MIDI, and a full-window screen asks
+    you to add a synth and shows how to connect it.
+- **How Humline knows**: a plugin cannot see which instrument receives its MIDI,
+  so Humline listens. It plays three short test notes (C4 and C3 held, then
+  note 42, the GM closed hat) on the voice channel and the drum channel, and
+  listens for the answer on its **Instrument** sidechain input (or, failing
+  that, on its main input). Two pitches an octave apart that keep sounding while
+  held mean an instrument. A hi-hat on note 42, notes that don't come back as
+  pitches, notes that only partly answer, or short one-shot hits mean a drum
+  kit. Silence means nothing is attached. A check takes about 2 seconds.
+- While the "add a synth" screen is up, Humline checks every 4 seconds, but only
+  while the transport is stopped and the input is quiet, so no test notes land
+  in a recording. Once something answers, it stops checking.
+- The header chip shows the current target. Click it to check again or to pick
+  **A synth / instrument** or **A drum kit** by hand, if a check gets it wrong.
+  The target is saved with the project.
+- If the answer came in on the main input, the footer warns that Humline may hear
+  the instrument as your voice. Route the instrument to the Instrument input.
+- **Live / Quantised** (Play page): Live sends every event the moment it is
+  detected. Quantised snaps to the grid, which needs a constant output delay
+  (about 0.25 s at 1/16), so it is for recording quantised clips rather than
+  playing live. In Live, the grid controls (Timing Snap, Strength, Min Length,
+  Swing) don't apply, and the Play page greys them out. Training a trigger
+  always uses the slower, more accurate measurement.
+
+**Pitch → notes**
+- YIN pitch tracking on a decimated signal (55 Hz – 1 kHz, monophonic).
+- Notes are anchored to detected attacks, so a note's position comes from when
+  you actually started it, not from when the pitch tracker made up its mind.
+- Out-of-tune singing is pulled into the selected key/scale with a variable
+  "Pitch Snap" amount (100 % = hard tune, 0 % = leave it alone).
+- "Stickiness" sets how long the tracker holds a note: low values follow every
+  slide, high values wait for a clear pitch change before moving (100 % is the
+  stickiest). Both controls are sliders on the Play page and the Key page.
+- Note lengths follow what you sang, snapped to the grid and clamped to a
+  minimum length.
+- **Pitch**, **Triggers**, **Chords** and **Pitch Bend** switches on the Play
+  page turn each part on or off. With Pitch off, beatboxing still makes drums.
+  The Play page also has the octave control.
+
+**Pitch bend**
+- With Pitch Bend on, the voice bends the note that is sounding, and only moves
+  to a new note once it goes further than the bend range (range 2: start on C,
+  slide up, and the note changes at D). Set the range (1-24 semitones) on the
+  Assign page to match your synth's bend range.
+- **IntelliBend** switches the bend off while you hold a note steady, so it stays
+  in tune. Stickiness sets how wide that steady zone is. **TruBend** follows
+  every movement of the voice, including slightly sharp or flat singing.
+- Bends are sent on the voice channel. When chords have their own channel,
+  **Bend chords** (Chords page) decides whether the chord bends too.
+
+**Timing → the grid**
+- Snap to 1/4, 1/8, 1/8T, 1/16, 1/16T or 1/32, or off.
+- Strength controls how hard you get pulled onto the line (0–100 %).
+- Swing delays the off-beats.
+- Minimum length stops staccato blips from becoming machine-gun notes.
+
+**Beatbox → drums**
+- Onset detection on a 4-band split (sub, 800 Hz, 2 kHz, 5 kHz+) with an
+  adaptive noise floor.
+- Rule-based classification into 8 pads (really-low kick, snare, clap, kick,
+  closed hat, open hat, low tom, high tom), each with its own output note.
+- **Train** page: press **Record takes** and make the sound. Each take lights a
+  circle, up to 12 per trigger, and you can stop whenever you like. Every take is
+  kept as its own example, not averaged, and matching is nearest-neighbour over
+  all of them, so a sound you perform a few different ways still matches.
+  **Clear all takes** empties the bank. Takes are saved with the project. While
+  recording, every percussive hit counts as a take, even a sound the rules would
+  not have recognised as a drum.
+- **Velocity** per trigger: on, the velocity follows how loud the hit was; off,
+  every hit is sent at full velocity (127).
+- Each pad plays a General MIDI drum note. Pick it from the list, or use one of
+  the quick-pick buttons on the Train page. Clicking a pad sends its note to
+  the attached drum kit, so you hear the sound it picked.
+- Drums go to channel 10 by default so a drum rack picks them up.
+
+**Output (Assign page)**
+- Humline sends MIDI only. The mic is never passed through to the output unless
+  you switch on Pass Input (DAW only). **MIDI Out** switches the MIDI off
+  entirely, test notes aside.
+
+**Key detection (Key page)**
+- Press **Key Detect** and sing a few bars. The raw, unsnapped pitch of every
+  voiced frame goes into a pitch-class histogram, and the wheel lights up the
+  notes it hears. When you stop (or after 30 s), the best match is applied as
+  the key restriction.
+- Or click notes on the wheel to pick them by hand.
+- Up to five suggested keys (Krumhansl-Kessler major/minor profiles, weighted
+  by how much of the melody falls inside the scale) are listed with a match
+  rating. Click one to apply it as the full key. With **Only the selected
+  notes** on, it is applied as a subset: just the notes chosen on the wheel.
+
+**Key restriction: switching notes off**
+- Click an in-key note on the Play page's wheel or keyboard, or on the Key
+  page's keyboard, to switch it off. Sung notes then snap to the nearest note
+  that is still on. Click it again to switch it back on. **All notes on** on the
+  Key page resets this. If every note is switched off, the whole scale is used.
+
+**Vocal → chords (Chords page)**
+- Every sung note is replaced by the chord mapped to it in the current key, so
+  the MIDI out is a chord track instead of a single line.
+- The mapping is diatonic: in C major the seven degrees map to C, Dm, Em, F, G,
+  Am, Bdim; change the key or scale on the Key page and the chords follow.
+- Chord presets: triads, sevenths, sus and power (fifths).
+- Voicings: close, wide (upper voices an octave up) and open (root, fifth, then
+  the third an octave up).
+- **Custom chords**: every chord tile has a drop-down. Pick a different chord for
+  that note (major, minor, dim, aug, sus2, sus4, 7, maj7, m7, m7b5, power), or
+  leave it on "From preset".
+- **Root bassline** adds the root an octave under the chord.
+- **Follow sung octave**: on, the chord is built on the octave you sang; off, it
+  stays at one octave (root between C4 and B4), shifted by **Fixed octave**.
+- **Chord MIDI channel**: "Same as voice" replaces the melody with the chord.
+  Pick a channel and the melody stays on the voice channel while the chord goes
+  out on its own channel.
+- A held note keeps its whole chord held; every voice starts and stops on the
+  same sample, so the chord is tight.
+- The page shows the chord for each degree of the key, with its roman numeral
+  and notes, and lights up the chord you are singing.
+
+**Also**
+- Vowel (aaa/eee/ooo) and dynamics (env) are streamed as CC, with assignable
+  CC numbers. Each dial has an **Input** range, the part of the vowel/envelope
+  reading that sweeps the whole dial (lower its max if you can't reach the top),
+  and a **CC out** range, the span of CC values it covers (for example, to cap a
+  filter cutoff). A reversed output range inverts the dial.
+- Selectable MIDI channels for voice and drums.
+- Everything is saved in the plugin state: parameters, pad notes and velocity
+  switches, every trigger take, notes switched off, and custom chords.
+
+## Building
+
+Requires CMake 3.22+ and a C++20 compiler.
+
+### MSVC (recommended, standard JUCE setup)
+
+```bash
+cmake -S . -B build -G "Visual Studio 17 2022" -DDBC_JUCE_DIR=<path to JUCE 6.1.6 or 7/8>
+cmake --build build --config Release
+```
+
+### MinGW-w64 (what this repo was built with)
+
+JUCE 6.1.6 is the last version that officially supports MinGW; this project is
+pinned to it and carries three small compatibility patches for modern GCC
+(missing `<cstring>`/`<utility>` includes and MinGW's UIAutomation macros):
+
+```bash
+cmake -S . -B build/plugin -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release \
+      -DDBC_JUCE_DIR=<path to JUCE 6.1.6> \
+      -DCMAKE_CXX_FLAGS="-include utility -include cstring -include cstdint -include cstdio"
+cmake --build build/plugin -j 8
+```
+
+The VST3 bundle ends up in
+`build/plugin/Humline_artefacts/Release/VST3/Humline.vst3`.
+Copy it to `C:\Program Files\Common Files\VST3\` and rescan in your DAW.
+
+The standalone app (`.../Standalone/Humline.exe`) works without a host. Use
+the **Audio / MIDI settings** button in its header to choose the microphone,
+the audio output and a MIDI output device. On Windows, a virtual MIDI port such
+as loopMIDI lets a DAW record the standalone's MIDI. The label above the input
+meter shows the device name (or "no mic"), so a closed input is visible. JUCE's
+standalone wrapper mutes the mic by default to avoid feedback. Humline switches
+that mute off, because it never sends the mic to the speakers.
+
+## Tests
+
+The analysis engine has a headless test suite (synthesised vocals and beatbox
+hits, checking the emitted MIDI):
+
+```bash
+g++ -std=c++20 -O2 -I Source Tests/main.cpp Source/core/*.cpp -o build/tests.exe
+./build/tests.exe
+```
+
+It covers grid snapping, swing, scale snapping in major/minor, late-and-sharp
+singing being corrected, unsnapped singing keeping its timing, out-of-key notes
+being pulled into the scale, kick/snare/hat classification, trigger training,
+a sustained note producing exactly one MIDI note, the chord mapper
+(diatonic triads/7ths, sus/power presets, voicings, and three sung notes
+becoming three chords in the MIDI out), training on a sound the rules reject,
+key detection (from histograms and from sung audio), the instrument check
+(a saw synth, a slow pad, a pluck, a GM drum kit, a kick sample played
+chromatically and silence, each heard on the Instrument input and on the main
+input over mic noise, plus cancelling a check), and the features from the
+Dubler 2 guides: notes switched off in the key, pitch on/off, a separate chord
+channel, chord follow/octave/root bassline/custom chords, CC dial ranges,
+per-trigger velocity, 12 stored takes per trigger, pitch bend (a C-to-D slide
+bends one note with range 12, changes note with range 1; IntelliBend holds a
+sharp note anchored while TruBend follows it).
+
+`HumlineSmoke` (built with the plugin) runs the real processor and editor. It
+checks that no notes go out with nothing attached, that notes do go out once an
+instrument is attached and the audio output stays silent, that a pad click
+sends its drum note on channel 10, that a full instrument check through the
+processor (a fake synth on the Instrument input) finds an instrument, and that
+the target, switched-off notes, custom chords, trigger velocity and takes
+survive a save and load.
+
+## Using it in a DAW
+
+1. Put the plugin on a track and choose your audio input (the mic).
+2. Add the instrument you want to play: a synth, or a drum kit. Send Humline's
+   MIDI out to it. In FL Studio: set a MIDI output port in Humline's wrapper
+   settings and the same number as the instrument's MIDI input port. In
+   Ableton: put Humline on a MIDI track and route that track's MIDI to the
+   instrument.
+3. So Humline can tell what it is driving, sidechain the instrument's audio into
+   Humline's **Instrument** input. Humline then checks on its own. Without the
+   sidechain, pick the instrument by hand from the header chip.
+4. Sing or beatbox. Notes or triggers appear on the channel you set (voice 1,
+   drums 10 by default), and the DAW can record them.
+
+### Timing note
+
+In **Live** (the default) events go out as soon as they are detected
+(about 20 ms for a drum hit, about 40 ms for a sung note), so you can play live
+and the timing is your own.
+
+In **Quantised** the plugin has to hear a note (and, for drums,
+hear it decay) before it can quantise it, so every event is sent a constant
+offset after its musical position: about 0.25 s at a 1/16 grid. Because the
+offset is constant, a recorded clip is rhythmically exact and only needs to be
+nudged left by that amount once. The footer shows the exact value.
+
+## Layout
+
+```
+Source/
+  core/          JUCE-free analysis engine
+    PitchDetector    YIN pitch tracking
+    OnsetDetector    band split + adaptive onset detection
+    DrumClassifier   template matching + fallback rules
+    Chords           diatonic chord mapping, voicings, chord names
+    Quantizer        grid/scale/strength/swing maths
+    VoiceEngine      streaming analysis → MIDI events (+ key histogram)
+    KeyDetector      pitch-class histogram → ranked key suggestions
+    InstrumentProbe  test notes → synth / drum kit / nothing
+  PluginProcessor  JUCE processor, parameters, state, instrument checks
+  PluginEditor     window, header, footer, monitor
+  StandaloneBridge standalone-only: device dialog, input unmute, MIDI out
+  ui/              look & feel, wheel, keyboard, pads, dials, panels
+Tests/main.cpp   headless engine tests
+Tests/smoke.cpp  processor + editor smoke test
+```
+
+## Not implemented
+
+- Polyphonic pitch detection — singing two notes at once is not tracked.
+- Chord *progressions*: the Chords page maps each sung note to a chord in the
+  key; it does not generate its own harmony from a progression.
+- Drums *and* melody from one Humline at once: the attached instrument picks
+  one or the other. Use two Humline instances for both.
+- Instrument detection is a heuristic. A pluck or 808 that dies away very fast
+  can read as a drum kit, and a pitched one-shot sample as an instrument. Pick
+  the target by hand from the header chip when that happens. Humline also does
+  not notice when an instrument is removed later. Use **Check again**.
+- With an instrument attached, any pitched sound becomes a note, so a beatboxed kick with a
+  clear pitch can come out as a very low note.
+- A separate MIDI-capture plugin (Dubler's "MIDI Capture"): Humline is itself
+  the plugin on the track, so the DAW records its MIDI output directly. There is
+  no in-plugin clip to drag out, and no "updated key" suggestion after a take.
+- More than 8 triggers: the pads are a fixed set of 8.

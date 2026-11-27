@@ -1,0 +1,6 @@
+.tools/
+build/
+*.exe
+*.zip
+.cloud-attachments/
+.freebuff/
