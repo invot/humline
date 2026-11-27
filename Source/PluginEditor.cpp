@@ -268,10 +268,13 @@ void HumlineEditor::refreshTarget()
 void HumlineEditor::showTargetMenu()
 {
     const auto target = proc.getTarget();
+    const bool playing = proc.isTransportPlaying();
 
     juce::PopupMenu menu;
     menu.addSectionHeader ("What is Humline playing?");
-    menu.addItem (1, "Check again (plays 3 test notes)", ! proc.isCheckingInstrument());
+    menu.addItem (1, playing ? "Check again (paused while the transport plays)"
+                             : "Check again (plays 3 test notes)",
+                  ! proc.isCheckingInstrument() && ! playing);
     menu.addSeparator();
     menu.addItem (2, "A synth / instrument", true, target == InstrumentTarget::Instrument);
     menu.addItem (3, "A drum kit", true, target == InstrumentTarget::DrumKit);

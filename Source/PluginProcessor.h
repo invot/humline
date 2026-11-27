@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Kit.h"
 #include "core/InstrumentProbe.h"
 #include "core/Take.h"
 #include "core/VoiceEngine.h"
@@ -35,7 +36,9 @@ public:
     bool acceptsMidi() const override              { return true; }
     bool producesMidi() const override             { return true; }
     bool isMidiEffect() const override             { return false; }
-    double getTailLengthSeconds() const override   { return 0.0; }
+    /** Quantised mode sends every event a constant delay after its position, so
+        a host that stops at the end of a take has to render past it. */
+    double getTailLengthSeconds() const override;
 
     int getNumPrograms() override                  { return 1; }
     int getCurrentProgram() override               { return 0; }
@@ -59,6 +62,13 @@ public:
     void  setPadMuted (int pad, bool muted);
     void  setPadName (int pad, const juce::String& name);
     juce::String getPadName (int pad) const;
+
+    /** The pad map, takes, velocity flags and chord overrides, ready for a kit
+        file. Everything else (parameters, key, the take) stays out. */
+    dbc::Kit captureKit (const juce::String& kitName) const;
+    /** Replaces those four things with a kit's; a running training pass stops.
+        Message thread only, like setStateInformation. */
+    void applyKit (const dbc::Kit& kit);
 
     /** Records takes for a pad until its bank of 12 is full or training is stopped.
         Returns false when the bank is already full. */
@@ -92,7 +102,9 @@ public:
     void setTarget (InstrumentTarget t);
 
     /** Plays the attached instrument a few test notes and listens for the answer
-        on the "Instrument" sidechain input (or the main input). About 2 s. */
+        on the "Instrument" sidechain input (or the main input). About 2 s.
+        Refused while the host transport is playing, so no test notes land in a
+        recording. */
     void startInstrumentCheck();
     bool isCheckingInstrument() const noexcept { return probe.isRunning() || probe.hasRecording(); }
 
@@ -193,6 +205,11 @@ private:
 
     void timerCallback() override;
     void mixInputToMono (const juce::AudioBuffer<float>& buffer, int numSamples);
+
+    /** One slice of a block: at most monoBuffer's capacity, so a host that hands
+        over more than prepareToPlay sized us for never causes an allocation. */
+    void processChunk (juce::AudioBuffer<float>& buffer, int numSamples,
+                       juce::MidiBuffer& midi, int midiOffset);
 
     /** Sends the note-offs the engine still owes, plus all-notes-off on every
         channel Humline can reach, and forgets the engine's MIDI state. */

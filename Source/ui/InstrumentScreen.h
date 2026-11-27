@@ -23,7 +23,8 @@ public:
         }
 
         checkButton.setColour (juce::TextButton::buttonColourId, pal::teal.withAlpha (0.85f));
-        checkButton.setTooltip ("Plays your instrument three short test notes and listens for the answer");
+        checkButton.setTooltip ("Plays your instrument three short test notes and listens for the answer. "
+                                "Paused while the transport plays, so no test notes land in a recording.");
         checkButton.onClick = [this] { proc.startInstrumentCheck(); refresh(); };
 
         synthButton.setColour (juce::TextButton::buttonColourId, pal::panelHi);
@@ -156,7 +157,7 @@ private:
             text = "Humline checks for an instrument every few seconds.";
         }
 
-        checkButton.setEnabled (! proc.isCheckingInstrument());
+        checkButton.setEnabled (! proc.isCheckingInstrument() && ! proc.isTransportPlaying());
 
         if (text != status || colour != statusColour)
         {

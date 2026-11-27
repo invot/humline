@@ -47,7 +47,8 @@ the PNGs it writes (all but `key-empty.png`) into `docs/screenshots/`.
   kit. Silence means nothing is attached. A check takes about 2 seconds.
 - While the "add a synth" screen is up, Humline checks every 4 seconds, but only
   while the transport is stopped and the input is quiet, so no test notes land
-  in a recording. Once something answers, it stops checking.
+  in a recording. A check started by hand is refused while the transport plays,
+  for the same reason. Once something answers, it stops checking.
 - The header chip shows the current target. Click it to check again or to pick
   **A synth / instrument** or **A drum kit** by hand, if a check gets it wrong.
   The target is saved with the project.
@@ -106,6 +107,12 @@ the PNGs it writes (all but `key-empty.png`) into `docs/screenshots/`.
   not have recognised as a drum.
 - **Velocity** per trigger: on, the velocity follows how loud the hit was; off,
   every hit is sent at full velocity (127).
+- **Kits** (Train page, under the pads): **Save kit...** writes the pad map, the
+  takes, the velocity flags and the chord overrides to a `.humlinekit` file, and
+  **Load kit...** brings them into another project. The **Factory kit** menu has
+  two ready-trained starting points (**GM starter**, **808 / trap**), for a
+  project that should not begin with nothing trained. Loading replaces what is
+  trained, so it asks first; nothing else in the project is touched.
 - Each pad plays a General MIDI drum note. Pick it from the list, or use one of
   the quick-pick buttons on the Train page. Clicking a pad sends its note to
   the attached drum kit, so you hear the sound it picked.
@@ -250,17 +257,99 @@ survive a save and load.
 
 ## Using it in a DAW
 
-1. Put the plugin on a track and choose your audio input (the mic).
-2. Add the instrument you want to play: a synth, or a drum kit. Send Humline's
-   MIDI out to it. In FL Studio: set a MIDI output port in Humline's wrapper
-   settings and the same number as the instrument's MIDI input port. In
-   Ableton: put Humline on a MIDI track and route that track's MIDI to the
-   instrument.
-3. So Humline can tell what it is driving, sidechain the instrument's audio into
-   Humline's **Instrument** input. Humline then checks on its own. Without the
-   sidechain, pick the instrument by hand from the header chip.
-4. Sing or beatbox. Notes or triggers appear on the channel you set (voice 1,
-   drums 10 by default), and the DAW can record them.
+Humline is a VST3 that hosts load as an **audio effect**: it has a microphone
+input, makes no sound of its own, and sends MIDI out. So every host needs the
+same two moves - Humline on an audio track (a mixer track in FL) with the mic,
+and its MIDI routed to an instrument on another track. Reaper is the exception:
+MIDI passes along one FX chain, so a single track is enough.
+
+1. Put Humline on an audio track and choose the microphone as that track's input.
+2. Add the instrument you want to play - a synth, or a drum kit - and set that
+   track's MIDI input to Humline. Keep monitoring (or arming) on to hear it.
+3. So Humline can tell what it is driving, feed the instrument's audio into
+   Humline's **Instrument** input. It then checks on its own; without that, pick
+   **A synth / instrument** or **A drum kit** from the header chip.
+4. Sing or beatbox. Notes and triggers go out on the channels you set (voice 1,
+   drums 10 by default), and the instrument's track records them.
+
+Humline's own track is silent by design. **Pass Input** is only for keeping the
+audio already on a mixer track (an instrument routed to the same track, say); the
+mic never reaches the output.
+
+### Ableton Live
+
+Live files Humline under audio effects, so it belongs on an **audio track**.
+(Live will also accept an audio effect after an instrument on a MIDI track, but
+Humline's output is silence, so the instrument behind it goes quiet unless
+**Pass Input** is on.)
+
+1. Create an audio track, drop Humline on it, and set **Audio From** to the
+   microphone's input.
+2. Create a MIDI track and load the synth (or a Drum Rack) on it.
+3. On that MIDI track set **MIDI From** to Humline's track, and the chooser under
+   it to **Humline** (**Post FX** if that is what your version lists).
+4. Set **Monitor** to **In** (or arm the track) to hear it; arm the track and
+   record to capture the notes.
+
+Two Live specifics:
+
+- **Live merges MIDI channels** when it routes between tracks, so everything
+  Humline sends arrives on one channel. A Drum Rack does not mind (it maps notes,
+  not channels), but a multitimbral instrument plays every part on one channel,
+  and **Chord MIDI channel** cannot split anything downstream. Leave it on
+  "Same as voice" and drive one instrument, or run two Humline instances with an
+  instrument each.
+- Live's plug-in MIDI routing depends on the version. If Humline's track does not
+  show up in **MIDI From**, run the standalone app and record its virtual MIDI
+  port instead (see the end of this section).
+
+For the automatic check, point the sidechain input Live offers for the plug-in at
+the instrument's track; if Live offers none, pick the target by hand.
+
+### FL Studio
+
+1. Put Humline on a mixer track and choose the microphone as that track's input.
+2. In Humline's wrapper settings (the gear icon on its window), set a **MIDI
+   output port** number.
+3. On the instrument's channel, set the same number as its **MIDI input port**.
+4. To let Humline hear the instrument, send the instrument's mixer track to
+   Humline's (select Humline's track and click the send arrow on the instrument's
+   track), or pick the target by hand.
+
+To keep the notes, record on the instrument's channel, or drag the take from
+Humline's **Notes** page onto the piano roll - FL imports `.mid`.
+
+### Reaper
+
+Reaper passes MIDI between plug-ins in the same FX chain, so one track is enough:
+
+1. Insert Humline, then the instrument, in the same track's FX chain, in that
+   order.
+2. Set the track's record input to the microphone and enable **Record
+   monitoring**.
+3. Set the track to **Record: output -> Record: output (MIDI)** and record; the
+   instrument plays the notes as they arrive.
+4. For the automatic check, send the instrument's audio into Humline's extra
+   input pair (the plug-in's I/O window), or pick the target by hand.
+
+### Studio One
+
+1. Put Humline on an audio track and choose the microphone as the track's input.
+2. Load the instrument on a second, instrument track.
+3. Expand the instrument track's header to show the MIDI routing, and set
+   **Instrument Input** to Humline with **MIDI Output 1** as the channel.
+4. Enable monitoring for the instrument track, arm it, and record.
+
+If Studio One offers Humline a sidechain input (the plug-in's extra input), point
+it at the instrument so the check can identify it; otherwise pick the target by
+hand.
+
+### If a host will not route a plug-in's MIDI
+
+Run the standalone app, choose a virtual MIDI port as its output (loopMIDI on
+Windows, for example), and record that port in the DAW. The **Audio / MIDI
+settings** button in the standalone opens the device chooser, and the header
+shows the port it is sending to.
 
 ### Timing note
 

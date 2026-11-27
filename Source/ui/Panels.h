@@ -340,6 +340,9 @@ public:
         addAndMakeVisible (noteCombo);
         addAndMakeVisible (muteButton);
         addAndMakeVisible (velocityButton);
+        addAndMakeVisible (kitCombo);
+        addAndMakeVisible (saveKitButton);
+        addAndMakeVisible (loadKitButton);
 
         nameEditor.setMultiLine (false);
         nameEditor.setFont (uiFont (14.0f));
@@ -410,6 +413,20 @@ public:
 
         for (int i = 0; i < 128; ++i)
             noteCombo.addItem (drumNoteName (i), i + 1);
+
+        // --- kit files: the pad map, takes, velocity flags and chords ----------
+        kitCombo.setTextWhenNothingSelected ("Factory kit...");
+
+        for (int i = 0; i < dbc::factoryKitNames().size(); ++i)
+            kitCombo.addItem (dbc::factoryKitNames()[i], i + 1);
+
+        kitCombo.onChange = [this] { loadFactoryKit(); };
+
+        saveKitButton.setButtonText ("Save kit...");
+        saveKitButton.onClick = [this] { saveKit(); };
+
+        loadKitButton.setButtonText ("Load kit...");
+        loadKitButton.onClick = [this] { openKit(); };
 
         for (size_t i = 0; i < quickPicks.size(); ++i)
         {
@@ -552,6 +569,8 @@ public:
                           "every hit full velocity. Below, choose which drum the pad plays (its MIDI note).",
                           trainHelpArea, juce::Justification::topLeft, 4);
 
+        drawCaption (g, kitCaptionArea, "Kit  (pads, takes, velocity, chords)");
+
         // take pips: one per stored take
         const int maxTakes = dbc::DrumClassifier::maxTakes;
         const int takes = proc.engine.getClassifier().numExamples (pads.getSelected());
@@ -596,7 +615,21 @@ public:
         area.removeFromLeft (16);
         auto right = area.reduced (20, 16);
 
+        // The kit strip sits under the pads, in the same column, so take it off
+        // the column before the pads fill what is left.
+        auto kitStrip = left.removeFromBottom (92).reduced (14, 4);
+        left.removeFromBottom (6);
+
         pads.setBounds (left.getX() + 14, left.getY() + 52, left.getWidth() - 28, left.getHeight() - 66);
+
+        kitCaptionArea = kitStrip.removeFromTop (14);
+        kitStrip.removeFromTop (6);
+        kitCombo.setBounds (kitStrip.removeFromTop (26));
+        kitStrip.removeFromTop (6);
+
+        const int half = (kitStrip.getWidth() - 8) / 2;
+        saveKitButton.setBounds (kitStrip.removeFromLeft (half).withHeight (30));
+        loadKitButton.setBounds (kitStrip.getX() + 8, kitStrip.getY(), half, 30);
 
         right.removeFromTop (30);
         trainHelpArea = right.removeFromTop (60);
@@ -635,6 +668,102 @@ public:
     }
 
 private:
+    void saveKit()
+    {
+        if (! lastKitDir.isDirectory())
+            lastKitDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+
+        chooser = std::make_unique<juce::FileChooser> ("Save the trigger kit",
+                                                       lastKitDir.getChildFile ("Humline kit.humlinekit"),
+                                                       "*.humlinekit");
+
+        const int chooserFlags = juce::FileBrowserComponent::saveMode
+                               | juce::FileBrowserComponent::canSelectFiles
+                               | juce::FileBrowserComponent::warnAboutOverwriting;
+
+        chooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+
+            if (file == juce::File())
+                return;
+
+            file = file.withFileExtension ("humlinekit");
+            lastKitDir = file.getParentDirectory();
+
+            const auto result = dbc::writeKitToFile (proc.captureKit (file.getFileNameWithoutExtension()), file);
+
+            if (result.failed())
+                juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon, "Humline",
+                                                        result.getErrorMessage());
+        });
+    }
+
+    void openKit()
+    {
+        if (! lastKitDir.isDirectory())
+            lastKitDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+
+        chooser = std::make_unique<juce::FileChooser> ("Load a trigger kit", lastKitDir, "*.humlinekit");
+
+        const int chooserFlags = juce::FileBrowserComponent::openMode
+                               | juce::FileBrowserComponent::canSelectFiles;
+
+        chooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+
+            if (! file.existsAsFile())
+                return;
+
+            lastKitDir = file.getParentDirectory();
+
+            dbc::Kit kit;
+            const auto result = dbc::readKitFromFile (file, kit);
+
+            if (result.failed())
+            {
+                juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon, "Humline",
+                                                        result.getErrorMessage());
+                return;
+            }
+
+            confirmAndApply (kit);
+        });
+    }
+
+    void loadFactoryKit()
+    {
+        const int index = kitCombo.getSelectedItemIndex();
+        kitCombo.setSelectedId (0, juce::dontSendNotification);
+
+        dbc::Kit kit;
+
+        if (dbc::makeFactoryKit (index, kit))
+            confirmAndApply (kit);
+    }
+
+    /** A kit replaces everything that is trained, so ask first. */
+    void confirmAndApply (const dbc::Kit& kit)
+    {
+        juce::Component::SafePointer<TrainPanel> safe (this);
+
+        const auto message = "Replace the current pad map, takes, velocity flags and chords with \""
+                           + kit.name + "\" (" + juce::String (kit.numTakes()) + " take(s))?";
+
+        juce::AlertWindow::showOkCancelBox (juce::AlertWindow::QuestionIcon, "Load kit", message,
+                                            "Replace", "Cancel", this,
+                                            juce::ModalCallbackFunction::create ([safe, kit] (int result)
+                                            {
+                                                if (safe.getComponent() == nullptr || result == 0)
+                                                    return;
+
+                                                safe->proc.applyKit (kit);
+                                                safe->refreshPadNames();
+                                                safe->updateFromSelectedPad();
+                                            }));
+    }
+
     void timerCallback() override
     {
         if (proc.engine.isTraining() || trainingWasActive)
@@ -653,12 +782,16 @@ private:
     juce::TextEditor nameEditor;
     juce::TextButton learnButton, clearButton, muteButton, velocityButton;
     juce::ComboBox noteCombo;
+    juce::ComboBox kitCombo;
+    juce::TextButton saveKitButton, loadKitButton;
+    std::unique_ptr<juce::FileChooser> chooser;
+    juce::File lastKitDir;
     bool bankFull = false;
 
     static constexpr std::array<int, 8> quickNotes { 36, 38, 42, 39, 46, 45, 50, 49 };
     std::array<juce::TextButton, 8> quickPicks;
 
-    juce::Rectangle<int> learnArea, pipArea, noteArea, pickArea, trainHelpArea;
+    juce::Rectangle<int> learnArea, pipArea, noteArea, pickArea, trainHelpArea, kitCaptionArea;
     bool trainingWasActive = false;
 };
 

@@ -399,6 +399,254 @@ int main()
             return 7;
     }
 
+    // Quantised mode: the tail has to cover the delay, or a host that stops at
+    // the end of a take (a bounce does) loses the notes still on their way out.
+    {
+        if (auto* q = dynamic_cast<juce::AudioParameterBool*> (proc.apvts.getParameter ("quantise")))
+            *q = true;
+
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer m;
+        buf.clear();
+        proc.processBlock (buf, m);             // one block so the delay is current
+
+        const double rate  = proc.getSampleRate() > 0.0 ? proc.getSampleRate() : 48000.0;
+        const double delay = (double) proc.engine.getOutputLatencySamples() / rate;
+        const double tail  = proc.getTailLengthSeconds();
+        const bool ok = delay > 0.0 && tail >= delay + 0.09;
+
+        std::fprintf (stderr, "[6e] tail %d ms for a %d ms quantise delay -> %s\n",
+                      juce::roundToInt (tail * 1000.0), juce::roundToInt (delay * 1000.0),
+                      ok ? "ok" : "TOO SHORT");
+
+        if (! ok)
+            return 8;
+    }
+
+    // A block bigger than prepareToPlay was told about is processed in slices,
+    // with no reallocation and nothing dropped at the end.
+    {
+        dbc::HumlineProcessor big;
+        big.prepareToPlay (48000.0, 512);
+
+        juce::AudioBuffer<float> buf (2, 5000);
+        juce::MidiBuffer m;
+
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 5000; ++i)
+                buf.setSample (ch, i, i >= 4400 ? 0.5f : 0.0f);
+
+        big.processBlock (buf, m);
+
+        const bool silent    = buf.getMagnitude (0, 5000) < 1.0e-6f;
+        const bool heardTail = big.inputLevelDb.load() > -20.0f;
+
+        std::fprintf (stderr, "[6f] oversized block: last slice heard %s, output silent %s -> %s\n",
+                      heardTail ? "yes" : "no", silent ? "yes" : "no",
+                      (silent && heardTail) ? "ok" : "WRONG");
+
+        big.releaseResources();
+
+        if (! silent || ! heardTail)
+            return 9;
+    }
+
+   #if JUCE_MAJOR_VERSION < 7   // the toolchain this ships with (see CMakeLists / release.yml)
+    // A check must never play test notes into a take: while the transport runs it
+    // is refused, and it works again as soon as the transport stops.
+    {
+        struct FakePlayHead : juce::AudioPlayHead
+        {
+            bool playing = false;
+
+            bool getCurrentPosition (CurrentPositionInfo& info) override
+            {
+                info = CurrentPositionInfo();
+                info.isPlaying   = playing;
+                info.ppqPosition = 0.0;
+                info.bpm         = 120.0;
+                return true;
+            }
+        };
+
+        FakePlayHead head;
+        dbc::HumlineProcessor gate;
+        gate.prepareToPlay (48000.0, 512);
+        gate.setPlayHead (&head);
+
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer m;
+        buf.clear();
+
+        head.playing = true;
+        gate.processBlock (buf, m);          // the play head is read here
+        gate.startInstrumentCheck();
+        const bool refusedWhilePlaying = ! gate.isCheckingInstrument();
+
+        head.playing = false;
+        gate.processBlock (buf, m);
+        gate.startInstrumentCheck();
+        const bool runsWhenStopped = gate.isCheckingInstrument();
+
+        gate.setPlayHead (nullptr);
+        gate.releaseResources();
+
+        std::fprintf (stderr, "[6g] check while playing: refused %s, runs when stopped %s -> %s\n",
+                      refusedWhilePlaying ? "yes" : "NO", runsWhenStopped ? "yes" : "NO",
+                      (refusedWhilePlaying && runsWhenStopped) ? "ok" : "WRONG");
+
+        if (! refusedWhilePlaying || ! runsWhenStopped)
+            return 10;
+    }
+   #endif
+
+    // Save / load / save / load: opening a project and saving it again must not
+    // duplicate the take or the trained trigger takes, and the saved state must
+    // not grow. (The take and the trigger takes are appended to the APVTS tree
+    // on save, and the APVTS keeps whatever tree it was loaded with.)
+    {
+        for (int pad = 0; pad < 3; ++pad)
+            for (int i = 0; i < 4; ++i)
+            {
+                dbc::DrumFeatures f;
+                f.low = 0.1f * (float) (pad + 1);
+                f.f1  = 0.25f * (float) i;
+                f.zcr = 0.05f;
+                proc.engine.getClassifier().addExample (pad, f);
+            }
+
+        const auto take = proc.getTake();
+
+        const auto templateCounts = [] (dbc::HumlineProcessor& p)
+        {
+            std::vector<int> counts;
+
+            for (int pad = 0; pad < dbc::numDrumPads; ++pad)
+                counts.push_back (p.engine.getClassifier().numExamples (pad));
+
+            return counts;
+        };
+
+        const auto expectedCounts = templateCounts (proc);
+
+        juce::MemoryBlock save1, save2, save3;
+        proc.getStateInformation (save1);
+
+        dbc::HumlineProcessor load1;
+        load1.setStateInformation (save1.getData(), (int) save1.getSize());
+        load1.getStateInformation (save2);
+
+        dbc::HumlineProcessor load2;
+        load2.setStateInformation (save2.getData(), (int) save2.getSize());
+        load2.getStateInformation (save3);
+
+        const auto once  = load1.getTake();
+        const auto twice = load2.getTake();
+
+        bool sameTake = ! take.empty() && once.size() == take.size() && twice.size() == take.size();
+
+        for (size_t i = 0; sameTake && i < take.size(); ++i)
+            sameTake = twice[i].note == take[i].note
+                    && twice[i].startBeats == take[i].startBeats
+                    && twice[i].lengthBeats == take[i].lengthBeats
+                    && twice[i].drum == take[i].drum;
+
+        const bool sameTemplates = templateCounts (load1) == expectedCounts
+                                && templateCounts (load2) == expectedCounts;
+        const bool sameSize = save2.getSize() == save1.getSize()
+                           && save3.getSize() == save1.getSize();
+
+        std::fprintf (stderr, "[6h] save/load x2: take %d -> %d -> %d note(s), templates %s, "
+                              "size %d -> %d -> %d -> %s\n",
+                      (int) take.size(), (int) once.size(), (int) twice.size(),
+                      sameTemplates ? "same" : "CHANGED",
+                      (int) save1.getSize(), (int) save2.getSize(), (int) save3.getSize(),
+                      (sameTake && sameTemplates && sameSize) ? "ok" : "WRONG");
+
+        for (int pad = 0; pad < 3; ++pad)
+            proc.engine.getClassifier().clearTemplate (pad);
+
+        if (! sameTake || ! sameTemplates || ! sameSize)
+            return 11;
+    }
+
+    // Kits: the pad map, takes, velocity flags and chords go to a file and come
+    // back into a fresh project; a factory kit arrives trained.
+    {
+        proc.setPadNote (5, 47);
+        proc.setPadName (5, "Shaker");
+        proc.setPadMuted (6, true);
+        proc.setPadVelocity (1, false);
+        proc.setChordOverride (3, dbc::ChordQuality::Sus4);
+
+        dbc::DrumFeatures f;
+        f.low = 0.31f;
+        f.f2 = 0.20f;
+        f.sustain = 0.40f;
+        proc.engine.getClassifier().clearTemplate (7);
+        proc.engine.getClassifier().addExample (7, f);
+        f.f2 = 0.25f;
+        proc.engine.getClassifier().addExample (7, f);
+
+        const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        const auto kitFile = folder.getChildFile ("humline-kit-test.humlinekit");
+        const auto junkFile = folder.getChildFile ("humline-not-a-kit.humlinekit");
+        kitFile.deleteFile();
+
+        const auto saved = dbc::writeKitToFile (proc.captureKit ("Test kit"), kitFile);
+
+        dbc::HumlineProcessor fresh;
+        dbc::Kit loaded;
+        const auto read = saved.wasOk() && dbc::readKitFromFile (kitFile, loaded).wasOk();
+        fresh.applyKit (loaded);
+
+        const bool kitOk = read
+                        && loaded.name == "Test kit"
+                        && fresh.getPadNote (5) == 47
+                        && fresh.getPadName (5) == "Shaker"
+                        && fresh.isPadMuted (6)
+                        && ! fresh.getPadVelocity (1)
+                        && fresh.getChordOverride (3) == dbc::ChordQuality::Sus4
+                        && fresh.engine.getClassifier().numExamples (7) == 2
+                        && std::abs (fresh.engine.getClassifier().getExample (7, 1).f2 - 0.25f) < 1.0e-5f;
+
+        junkFile.replaceWithText ("<NOTKIT/>");
+        dbc::Kit rejectedKit;
+        const bool rejectsJunk = dbc::readKitFromFile (junkFile, rejectedKit).failed();
+
+        dbc::Kit factory;
+        const bool haveFactory = dbc::makeFactoryKit (0, factory);
+        fresh.applyKit (factory);
+
+        int trainedPads = 0;
+
+        for (int pad = 0; pad < dbc::numDrumPads; ++pad)
+            if (fresh.engine.getClassifier().numExamples (pad) > 0)
+                ++trainedPads;
+
+        const bool factoryOk = haveFactory && trainedPads == dbc::numDrumPads
+                            && fresh.getPadNote (3) == 36
+                            && fresh.getPadVelocity (1);
+
+        std::fprintf (stderr, "[6i] kit file: %d byte(s), %s; junk rejected %s; factory kit %d pad(s) trained -> %s\n",
+                      (int) kitFile.getSize(), kitOk ? "round-trips" : "WRONG",
+                      rejectsJunk ? "yes" : "NO", trainedPads, factoryOk ? "ok" : "WRONG");
+
+        kitFile.deleteFile();
+        junkFile.deleteFile();
+
+        // Put the processor back the way the later checks expect to find it.
+        proc.setPadNote (5, 46);
+        proc.setPadName (5, dbc::defaultPadName (5));
+        proc.setPadMuted (6, false);
+        proc.setPadVelocity (1, true);
+        proc.setChordOverride (3, dbc::ChordQuality::Preset);
+        proc.engine.getClassifier().clearTemplate (7);
+
+        if (! kitOk || ! rejectsJunk || ! factoryOk)
+            return 12;
+    }
+
     if (auto* editor = proc.createEditor())
     {
         std::fprintf (stderr, "[7] editor constructed (%d x %d)\n", editor->getWidth(), editor->getHeight());

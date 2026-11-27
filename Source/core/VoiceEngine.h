@@ -125,6 +125,10 @@ private:
 
     int64_t latencyFor (const Settings& s) noexcept;
 
+    /** The host moved the playhead (a loop, a locate): everything the old
+        position held or queued is released, and the take keeps what was sung. */
+    void releaseTimeline (const Settings& s);
+
     //==========================================================================
     double sampleRate = 48000.0;
     int    hop        = 256;
@@ -134,6 +138,12 @@ private:
     int64_t blockStartAbs = 0;
     double  blockStartPpq = 0.0;
     double  bpm           = 120.0;
+
+    // The previous block's musical position, so a host loop or locate can be
+    // told apart from ordinary playback.
+    bool    haveLastBlock  = false;
+    double  lastBlockPpq   = 0.0;
+    double  lastBlockBeats = 0.0;
 
     PitchDetector pitch;
     OnsetDetector onset;

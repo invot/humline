@@ -1306,6 +1306,115 @@ void pushNote (LiveState& live, float start, float len, int note, bool drum)
     ++live.historySeq;
 }
 
+void testTimelineJump()
+{
+    std::printf ("\n[timeline jump]\n");
+
+    Settings s;
+    s.grid = SnapGrid::Sixteenth;
+    s.timingStrength = 1.0f;
+    s.keyLock = true;
+    s.keyRoot = 0;
+    s.scale = ScaleType::Major;
+    s.pitchSnap = 1.0f;
+    s.drumsEnabled = false;
+
+    std::vector<float> audio ((size_t) (2.4 * sr), 0.0f);
+    addTone (audio, 0.02, 0.98, 220.00, 0.35);   // A3, held across the jump at 0.85 s
+    addTone (audio, 1.20, 0.70, 261.63, 0.35);   // C4, sung after it
+
+    const int jumpPos = ((int) (0.85 * sr) / 512) * 512;
+
+    VoiceEngine engine;
+    engine.prepare (sr, 512);
+
+    std::vector<MidiEvent> block;
+    std::vector<Event> events;
+
+    const auto run = [&] (int from, int to, double ppqAtFrom)
+    {
+        for (int pos = from; pos < to; pos += 512)
+        {
+            const int n = std::min (512, (int) audio.size() - pos);
+            const double ppq = ppqAtFrom + (double) (pos - from) / sr * 2.0;
+
+            engine.process (audio.data() + pos, n, ppq, 120.0, s, block);
+
+            for (const auto& m : block)
+                events.push_back ({ (int64_t) pos + m.offset, m.status, m.data1, m.data2 });
+        }
+    };
+
+    run (0, jumpPos, 0.0);
+
+    check (! noteOns (events, 1).empty(), "a note is sounding before the host jumps");
+
+    // The host loops: the playhead goes back to bar 5 while that note is held.
+    const double loopPpq = 16.0;
+    const size_t firstAfterJump = events.size();
+    run (jumpPos, (int) audio.size(), loopPpq);
+
+    int offsAtJump = 0, allNotesOff = 0;
+
+    for (size_t i = firstAfterJump; i < events.size() && events[i].abs < jumpPos + 512; ++i)
+    {
+        const auto& e = events[i];
+
+        if (e.type() == 0x80 && e.channel() == 1)                   ++offsAtJump;
+        if (e.type() == 0xB0 && e.data1 == 123 && e.channel() == 1) ++allNotesOff;
+    }
+
+    check (offsAtJump > 0, "the note held across the jump is released there");
+    check (allNotesOff > 0, "the jump sends an all-notes-off on the voice channel");
+
+    // Nothing is placed back on the old timeline, and the engine keeps working on
+    // the new one.
+    const int64_t latency = engine.getOutputLatencySamples();
+    const auto newBeats = [&] (int64_t abs)
+    {
+        return loopPpq + (double) (abs - latency - jumpPos) / sr * 2.0;
+    };
+
+    bool staleNote = false, laterNote = false;
+
+    for (size_t i = firstAfterJump; i < events.size(); ++i)
+    {
+        const auto& e = events[i];
+
+        if (e.type() != 0x90 || e.data2 == 0 || e.channel() != 1)
+            continue;
+
+        const double b = newBeats (e.abs);
+        staleNote = staleNote || b < loopPpq - 0.01;
+        laterNote = laterNote || (b > loopPpq + 0.2 && b < loopPpq + 2.0);
+    }
+
+    check (! staleNote, "no note is placed back on the old timeline");
+    check (laterNote, "a note sung after the jump lands on the new timeline");
+
+    // Nothing is left hanging across the jump.
+    bool allReleased = true;
+
+    for (size_t i = 0; i < events.size(); ++i)
+    {
+        const auto& e = events[i];
+
+        if (e.type() != 0x90 || e.data2 == 0)
+            continue;
+
+        const bool released = std::any_of (events.begin() + (long) i, events.end(),
+                                           [&] (const Event& o)
+                                           {
+                                               return o.type() == 0x80 && o.data1 == e.data1
+                                                   && o.channel() == e.channel() && o.abs >= e.abs;
+                                           });
+
+        allReleased = allReleased && released;
+    }
+
+    check (allReleased, "every note that went out is released, the jump included");
+}
+
 void testTake()
 {
     std::printf ("\n[take: capture + export layout]\n");
@@ -1447,6 +1556,7 @@ int main()
     testInstrumentProbe();
     testDublerFeatures();
     testLiveModes();
+    testTimelineJump();
     testTake();
 
     std::printf ("\n%s (%d failure(s))\n", gFailures == 0 ? "ALL TESTS PASSED" : "TESTS FAILED", gFailures);

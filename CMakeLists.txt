@@ -65,6 +65,7 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
     target_sources(Humline PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/Kit.cpp
         Source/StandaloneBridge.cpp
         ${DBC_CORE_SOURCES})
 
@@ -99,6 +100,7 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
         Tests/smoke.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/Kit.cpp
         Source/StandaloneBridge.cpp
         ${DBC_CORE_SOURCES})
     target_include_directories(HumlineSmoke PRIVATE Source)

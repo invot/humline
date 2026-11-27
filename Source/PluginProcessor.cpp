@@ -59,10 +59,6 @@ namespace
     const char* const kDialIds[numCcDials] { "ccA", "ccE", "ccO", "ccDyn" };
     const char* const kDialNames[numCcDials] { "Vowel A", "Vowel E", "Vowel O", "Envelope" };
 
-    const char* defaultPadNames[numDrumPads] {
-        "Really Low Bassdrum", "Snare", "Clap", "Bassdrum",
-        "Closed Hat", "Open Hat", "Low Tom", "High Tom"
-    };
 }
 
 //==============================================================================
@@ -134,7 +130,7 @@ HumlineProcessor::HumlineProcessor()
         padNotes[i].store (Settings().padNote[i]);
         padMutes[i].store (false);
         padVelocity[i].store (true);
-        padNames[i] = defaultPadNames[i];
+        padNames[i] = defaultPadName (i);
     }
 
     engine.onTrainingComplete = [this]
@@ -293,7 +289,9 @@ void HumlineProcessor::setTarget (InstrumentTarget t)
 
 void HumlineProcessor::startInstrumentCheck()
 {
-    if (! probeReady.load() || isCheckingInstrument())
+    // A check plays test notes, so it must never run into a take: the transport
+    // is the one thing that tells us the DAW might be recording.
+    if (! probeReady.load() || isCheckingInstrument() || transportPlaying.load())
         return;
 
     const auto s = buildSettings();
@@ -372,8 +370,11 @@ void HumlineProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     probeReady.store (false);
     engine.prepare (sampleRate, samplesPerBlock);
-    monoBuffer.setSize (1, std::max (32, samplesPerBlock), false, true, false);
-    sideBuffer.setSize (1, std::max (32, samplesPerBlock), false, true, false);
+    // Headroom, so a host that hands over a bigger block than it prepared never
+    // needs an allocation inside processBlock.
+    const int bufferSize = juce::jmax (4096, samplesPerBlock);
+    monoBuffer.setSize (1, bufferSize, false, true, false);
+    sideBuffer.setSize (1, bufferSize, false, true, false);
     blockEvents.reserve (256);
     probeEvents.reserve (32);
     silenceEvents.reserve (16);
@@ -388,6 +389,16 @@ void HumlineProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     bypassed = false;
     fallbackPpq = 0.0;
     warnedNoPlayHead = false;
+}
+
+double HumlineProcessor::getTailLengthSeconds() const
+{
+    // In Quantised every event goes out a constant delay after its position. A
+    // host that stops calling processBlock at the end of a take - an offline
+    // bounce does exactly that - would drop the last notes, so ask it to render
+    // past the end by that delay (plus a little slack).
+    const double rate = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    return (double) engine.getOutputLatencySamples() / rate + 0.1;
 }
 
 void HumlineProcessor::reset()
@@ -492,7 +503,6 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     juce::ScopedNoDenormals noDenormals;
 
     const int numSamples = buffer.getNumSamples();
-    const int numChannels = buffer.getNumChannels();
 
     // Humline generates its own MIDI: the host's events are not passed through to
     // the instrument, so "MIDI Out" off really does stop the MIDI.
@@ -502,8 +512,38 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     if (numSamples <= 0)
         return;
 
-    if (monoBuffer.getNumSamples() < numSamples)
-        monoBuffer.setSize (1, numSamples, false, true, false);
+    // A host should call prepareToPlay first; if one does not, give the buffers
+    // a size once rather than writing into an empty one.
+    if (monoBuffer.getNumSamples() <= 0)
+    {
+        monoBuffer.setSize (1, juce::jmax (4096, numSamples), false, true, false);
+        sideBuffer.setSize (1, juce::jmax (4096, numSamples), false, true, false);
+    }
+
+    const int capacity = monoBuffer.getNumSamples();
+
+    if (numSamples <= capacity)
+    {
+        processChunk (buffer, numSamples, midiMessages, 0);
+        return;
+    }
+
+    // The host handed over more samples than prepareToPlay sized us for. The
+    // analysis is sample-continuous, so process the block in slices rather than
+    // allocating on the audio thread.
+    for (int start = 0; start < numSamples; start += capacity)
+    {
+        const int n = juce::jmin (capacity, numSamples - start);
+        juce::AudioBuffer<float> slice (buffer.getArrayOfWritePointers(), buffer.getNumChannels(),
+                                        start, n);
+        processChunk (slice, n, midiMessages, start);
+    }
+}
+
+void HumlineProcessor::processChunk (juce::AudioBuffer<float>& buffer, int numSamples,
+                                     juce::MidiBuffer& midiMessages, int midiOffset)
+{
+    const int numChannels = buffer.getNumChannels();
 
     const auto settings = buildSettings();
 
@@ -532,6 +572,8 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
 
             if (const auto pBpm = pos->getBpm())
                 bpm = *pBpm;
+
+            transportPlaying.store (pos->getIsPlaying());
         }
        #else
         juce::AudioPlayHead::CurrentPositionInfo info;
@@ -541,6 +583,7 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             ppq = info.ppqPosition;
             bpm = info.bpm > 1.0 ? info.bpm : 120.0;
             havePpq = true;
+            transportPlaying.store (info.isPlaying);
         }
        #endif
     }
@@ -552,7 +595,12 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     auto& events = blockEvents;
     engine.process (mono, numSamples, ppq, bpm, settings, events);
 
-    fallbackPpq = ppq + (double) numSamples / std::max (1.0, getSampleRate()) * bpm / 60.0;
+    // Without a play head (the standalone app, some hosts) this fallback is the
+    // only timeline there is. getSampleRate() can be 0 outside a host, so use
+    // the rate prepareToPlay was given: a fallback that runs at the wrong speed
+    // would look like the host jumping the playhead on every block.
+    const double rate = getSampleRate() > 0.0 ? getSampleRate() : preparedRate;
+    fallbackPpq = ppq + (double) numSamples / std::max (1.0, rate) * bpm / 60.0;
 
     // --- the take -----------------------------------------------------------
     // The history ring only holds 32 notes, so drain it every block. If the
@@ -639,7 +687,7 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     // processing stopped and restarted, a project loaded - releases what the old
     // state was playing first, so nothing is left held at the other end.
     if (targetChanged || turnedOff || interrupted)
-        silenceMidiOut (midiMessages, settings, 0);
+        silenceMidiOut (midiMessages, settings, midiOffset);
 
     if (midiOn && currentTarget != InstrumentTarget::None)
     {
@@ -650,13 +698,13 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
                 continue;
 
             midiMessages.addEvent (juce::MidiMessage ((int) e.status, (int) e.data1, (int) e.data2),
-                                   juce::jlimit (0, numSamples - 1, e.offset));
+                                   midiOffset + juce::jlimit (0, numSamples - 1, e.offset));
         }
     }
 
     for (const auto& e : probeEvents)
         midiMessages.addEvent (juce::MidiMessage ((int) e.status, (int) e.data1, (int) e.data2),
-                               juce::jlimit (0, numSamples - 1, e.offset));
+                               midiOffset + juce::jlimit (0, numSamples - 1, e.offset));
 
     // --- live meters --------------------------------------------------------
     float peak = 0.0f;
@@ -933,6 +981,64 @@ juce::String HumlineProcessor::getPadName (int pad) const
     return (pad >= 0 && pad < numDrumPads) ? padNames[pad] : juce::String();
 }
 
+Kit HumlineProcessor::captureKit (const juce::String& kitName) const
+{
+    Kit kit = Kit::defaults();
+    kit.name = kitName.isNotEmpty() ? kitName.trim() : juce::String ("Untitled kit");
+
+    const auto& classifier = engine.getClassifier();
+
+    for (int i = 0; i < numDrumPads; ++i)
+    {
+        kit.note[i] = padNotes[i].load();
+        kit.padName[i] = padNames[i];
+        kit.muted[i] = padMutes[i].load();
+        kit.velocity[i] = padVelocity[i].load();
+        kit.takes[i].clear();
+
+        for (int t = 0; t < classifier.numExamples (i); ++t)
+            kit.takes[i].push_back (classifier.getExample (i, t));
+    }
+
+    for (int d = 0; d < 12; ++d)
+        kit.chordOverride[d] = (ChordQuality) juce::jlimit (0, (int) ChordQuality::NumQualities - 1,
+                                                           chordOverrides[d].load());
+
+    return kit;
+}
+
+void HumlineProcessor::applyKit (const Kit& kit)
+{
+    if (engine.isTraining())
+        cancelTraining();
+
+    for (int i = 0; i < numDrumPads; ++i)
+    {
+        padNotes[i].store (juce::jlimit (0, 127, kit.note[i]));
+        padMutes[i].store (kit.muted[i]);
+        padVelocity[i].store (kit.velocity[i]);
+        padNames[i] = kit.padName[i].isNotEmpty() ? kit.padName[i] : juce::String (defaultPadName (i));
+    }
+
+    auto& classifier = engine.getClassifier();
+    classifier.clearAll();
+
+    for (int i = 0; i < numDrumPads; ++i)
+    {
+        for (const auto& example : kit.takes[i])
+        {
+            if (! classifier.addExample (i, example))
+                break;                      // the bank is full
+        }
+    }
+
+    for (int d = 0; d < 12; ++d)
+        chordOverrides[d].store (juce::jlimit (0, (int) ChordQuality::NumQualities - 1,
+                                               (int) kit.chordOverride[d]));
+
+    ++uiStateVersion;
+}
+
 bool HumlineProcessor::startTraining (int pad)
 {
     const int room = DrumClassifier::maxTakes - engine.getClassifier().numExamples (pad);
@@ -996,6 +1102,21 @@ void HumlineProcessor::cancelTraining()
 void HumlineProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+
+    // apvts.replaceState() keeps the tree setStateInformation handed it, so a
+    // project that has been opened already carries the previous session's PADS,
+    // TEMPLATES, HUMLINE and TAKE children. Appending this session's on top of
+    // those would read the take and the trigger takes twice on the next load,
+    // and grow the saved state every time a project is loaded and saved again.
+    // Drop them first, so saving always writes exactly one of each.
+    for (int i = state.getNumChildren(); --i >= 0;)
+    {
+        const auto child = state.getChild (i);
+
+        if (child.hasType ("PADS") || child.hasType ("TEMPLATES")
+            || child.hasType ("HUMLINE") || child.hasType ("TAKE"))
+            state.removeChild (i, nullptr);
+    }
 
     juce::ValueTree pads ("PADS");
 

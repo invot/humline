@@ -25,6 +25,10 @@ void VoiceEngine::reset()
     blockStartPpq = 0.0;
     hopCountdown = hop;
 
+    haveLastBlock  = false;
+    lastBlockPpq   = 0.0;
+    lastBlockBeats = 0.0;
+
     pendingOnsets.clear();
     pendingEvents.clear();
     drumRegions.clear();
@@ -64,9 +68,22 @@ void VoiceEngine::process (const float* input, int numSamples,
     if (numSamples <= 0 || input == nullptr)
         return;
 
+    // A host loop or locate moves the playhead while notes are still sounding or
+    // queued. Catch it before re-anchoring: the events the old position was
+    // waiting on can no longer be placed, and a held note would never be let go.
+    // A frozen playhead (transport stopped) is not a jump.
+    constexpr double jumpBeats = 0.25;   // a 1/16: anything bigger is a move, not drift
+
+    if (haveLastBlock && std::abs (startPpq - lastBlockPpq) > 1.0e-9
+        && std::abs (startPpq - (lastBlockPpq + lastBlockBeats)) > jumpBeats)
+    {
+        releaseTimeline (s);
+    }
+
+    bpm = tempo > 1.0 ? tempo : 120.0;
+
     blockStartAbs = absPos;
     blockStartPpq = startPpq;
-    bpm = tempo > 1.0 ? tempo : 120.0;
 
     latencyFor (s);   // keeps the reported output delay current for this mode
 
@@ -91,6 +108,10 @@ void VoiceEngine::process (const float* input, int numSamples,
             processFrame (s);
         }
     }
+
+    lastBlockPpq   = startPpq;
+    lastBlockBeats = (double) numSamples * bpm / 60.0 / sampleRate;
+    haveLastBlock  = true;
 
     flush (midiOut, numSamples);
 }
@@ -790,6 +811,69 @@ double VoiceEngine::ppqFromAbs (int64_t abs) const noexcept
 int64_t VoiceEngine::absFromPpq (double ppq) const noexcept
 {
     return blockStartAbs + (int64_t) std::llround ((ppq - blockStartPpq) * 60.0 / bpm * sampleRate);
+}
+
+void VoiceEngine::releaseTimeline (const Settings& s)
+{
+    // Nothing sounding and nothing queued means there is no state to release:
+    // do not send an all-notes-off into a channel Humline had nothing on.
+    const bool hadState = noteOnSent || ! pendingEvents.empty();
+
+    // Everything queued belonged to the old position, so it goes before the
+    // release below is scheduled.
+    pendingEvents.clear();
+
+    // The old position's notes end here, at the first sample of the new one, and
+    // the take keeps the part that had already been sung.
+    if (noteOnSent)
+    {
+        const double endBeats = ppqFromAbs (absPos);
+
+        for (int i = 0; i < activeOutCount; ++i)
+        {
+            schedule (absPos, (uint8_t) (0x80 | activeOutChans[i]), (uint8_t) activeOutNotes[i], 64);
+            pushHistory (activeStartBeats, endBeats - activeStartBeats, activeOutNotes[i], false);
+        }
+    }
+
+    // A delayed note-off whose note-on already went out would hang, so every
+    // channel Humline can reach gets a plain all-notes-off too.
+    if (hadState)
+    {
+        const int chordChannel = (s.chordChannel >= 1 && s.chordChannel <= 16) ? s.chordChannel : s.voiceChannel;
+        const int channels[3] { s.voiceChannel, drumOutChannel (s), chordChannel };
+
+        for (int i = 0; i < 3; ++i)
+        {
+            bool seen = false;
+
+            for (int j = 0; j < i; ++j)
+                seen = seen || channels[j] == channels[i];
+
+            if (! seen)
+                schedule (absPos, (uint8_t) (0xB0 | (std::clamp (channels[i], 1, 16) - 1)), 123, 0);
+        }
+    }
+
+    pendingOnsets.clear();
+    drumRegions.clear();
+
+    activeOutCount = 0;
+    noteOnSent     = false;
+    bendChans[0] = bendChans[1] = -1;
+    lastBend  = 8192;
+    bendDev   = 0.0f;
+
+    runActive       = false;
+    runFrames       = 0;
+    runCount        = 0;
+    runOff          = 0;
+    runSum          = 0.0f;
+    runPeakLevel    = 0.0f;
+    runQuietFrames  = 0;
+    liveReleaseAbs  = -1;
+    live.activeNote = -1;
+    live.voiced     = false;
 }
 
 void VoiceEngine::schedule (int64_t abs, uint8_t status, uint8_t d1, uint8_t d2, bool drum)
