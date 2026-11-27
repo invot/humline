@@ -272,7 +272,9 @@ void InstrumentProbe::process (const float* sidechain, const float* mainInput, i
             emit (out, std::max (0, n - 1), false, soundingNote);
 
         soundingNote = -1;
-        phase.store (Phase::Recorded);
+        // A cancel that raced this last block still wins: the recording is dropped
+        // instead of being analysed over the target the user just picked.
+        phase.store (cancelRequested.load() ? Phase::Idle : Phase::Recorded);
     }
 }
 

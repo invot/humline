@@ -297,7 +297,7 @@ void HumlineProcessor::startInstrumentCheck()
         return;
 
     const auto s = buildSettings();
-    probe.start (s.voiceChannel, s.drumsOnDrumChan ? 10 : s.drumChannel);
+    probe.start (s.voiceChannel, drumOutChannel (s));
     checkStartedMs = juce::Time::getMillisecondCounter();
     autoCheckTicks = 0;
     ++uiStateVersion;
@@ -376,18 +376,35 @@ void HumlineProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     sideBuffer.setSize (1, std::max (32, samplesPerBlock), false, true, false);
     blockEvents.reserve (256);
     probeEvents.reserve (32);
+    silenceEvents.reserve (16);
     probe.prepare (sampleRate);
     preparedRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     probeReady.store (true);
     previewSamplesLeft = 0;
     previewNote = -1;
     lastSentTarget.store (-1);
+    pendingSilence.store (true);   // a restart releases whatever the old state was playing
+    midiOutWasOn = true;
+    bypassed = false;
     fallbackPpq = 0.0;
     warnedNoPlayHead = false;
 }
 
+void HumlineProcessor::reset()
+{
+    // The host restarted the transport or jumped somewhere: a note that was
+    // sounding can no longer be finished, so the next block releases it instead
+    // of leaving it held at the other end.
+    pendingSilence.store (true);
+    engine.reset();
+}
+
 void HumlineProcessor::releaseResources()
 {
+    // The host stops calling processBlock from here. Everything the engine was
+    // holding is released on the next block (a restart, a reload, a new prepare),
+    // so a plugin that goes away does not leave a note stuck.
+    pendingSilence.store (true);
     engine.reset();
 }
 
@@ -419,12 +436,68 @@ void HumlineProcessor::mixInputToMono (const juce::AudioBuffer<float>& buffer, i
         juce::FloatVectorOperations::multiply (mono, 1.0f / (float) live, numSamples);
 }
 
+void HumlineProcessor::silenceMidiOut (juce::MidiBuffer& midi, const Settings& s, int offset)
+{
+    // The notes the engine still believes are on get a note-off, then a plain
+    // all-notes-off on every channel Humline can reach catches anything else.
+    silenceEvents.clear();
+    engine.silence (silenceEvents);
+
+    for (const auto& e : silenceEvents)
+        midi.addEvent (juce::MidiMessage ((int) e.status, (int) e.data1, (int) e.data2), offset);
+
+    const int chordChannel = (s.chordChannel >= 1 && s.chordChannel <= 16) ? s.chordChannel
+                                                                          : s.voiceChannel;
+
+    for (const int ch : { s.voiceChannel, drumOutChannel (s), chordChannel })
+        midi.addEvent (juce::MidiMessage::allNotesOff (ch), offset);
+}
+
+void HumlineProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+{
+    juce::ScopedNoDenormals noDenormals;
+
+    const int numSamples = buffer.getNumSamples();
+
+    if (numSamples <= 0)
+        return;
+
+    // Bypassed, Humline still has nothing of its own to say: the host's MIDI is
+    // not passed on, and the track gets silence rather than the raw mic.
+    midiMessages.clear();
+
+    const auto settings = buildSettings();
+
+    if (! bypassed)
+    {
+        // Anything it left sounding is released, and processing starts clean
+        // when bypass is switched off again.
+        bypassed = true;
+        silenceMidiOut (midiMessages, settings, 0);
+        engine.reset();
+    }
+
+    const bool passInput = p.passInput->load() > 0.5f && ! isStandaloneApp();
+    const int inputChannels = getMainBusNumInputChannels();
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        if (! passInput || ch >= inputChannels)
+            buffer.clear (ch, 0, numSamples);
+
+    inputLevelDb.store (-100.0f);
+}
+
 void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
 
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
+
+    // Humline generates its own MIDI: the host's events are not passed through to
+    // the instrument, so "MIDI Out" off really does stop the MIDI.
+    midiMessages.clear();
+    bypassed = false;
 
     if (numSamples <= 0)
         return;
@@ -528,7 +601,7 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     const bool probing = probe.isRunning() || ! probeEvents.empty();
 
     // A drum preview: a short note on the drum channel, to the attached kit.
-    const int drumChannel = settings.drumsOnDrumChan ? 10 : settings.drumChannel;
+    const int drumChannel = drumOutChannel (settings);
 
     if (previewSamplesLeft > 0)
     {
@@ -556,14 +629,17 @@ void HumlineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     const auto currentTarget = getTarget();
     const bool midiOn = p.midiOut->load() > 0.5f;
 
-    if (lastSentTarget.exchange ((int) currentTarget) != (int) currentTarget)
-    {
-        const int channels[] { settings.voiceChannel, drumChannel,
-                               settings.chordChannel > 0 ? settings.chordChannel : settings.voiceChannel };
+    const bool targetChanged = lastSentTarget.exchange ((int) currentTarget) != (int) currentTarget;
+    const bool turnedOff     = ! midiOn && midiOutWasOn;
+    const bool interrupted   = pendingSilence.exchange (false);
 
-        for (int ch : channels)
-            midiMessages.addEvent (juce::MidiMessage::allNotesOff (ch), 0);
-    }
+    midiOutWasOn = midiOn;
+
+    // Every way the MIDI state can go away - a new target, MIDI Out switched off,
+    // processing stopped and restarted, a project loaded - releases what the old
+    // state was playing first, so nothing is left held at the other end.
+    if (targetChanged || turnedOff || interrupted)
+        silenceMidiOut (midiMessages, settings, 0);
 
     if (midiOn && currentTarget != InstrumentTarget::None)
     {
@@ -676,7 +752,7 @@ bool HumlineProcessor::writeTakeMidi (juce::OutputStream& out, TakeFilter filter
     const double bpm = juce::jlimit (20.0, 999.0, takeBpm.load());
     const auto settings = buildSettings();
     const int voiceChannel = settings.voiceChannel;
-    const int drumChannel  = settings.drumsOnDrumChan ? settings.drumChannel : settings.voiceChannel;
+    const int drumChannel  = drumOutChannel (settings);
 
     juce::MidiFile file;
     file.setTicksPerQuarterNote (ticksPerQuarter);
@@ -1025,6 +1101,11 @@ void HumlineProcessor::setStateInformation (const void* data, int sizeInBytes)
     // Older sessions saved no target: nothing attached until a check finds one.
     probe.cancel();
     target.store ((int) InstrumentTarget::None);
+
+    // The project's take and MIDI state replace whatever was here: release the
+    // old notes on the next block.
+    pendingSilence.store (true);
+    engine.reset();
 
     // Older sessions have no HUMLINE node: start from every note on, no custom chords.
     noteMask.store ((int) allNotesMask);

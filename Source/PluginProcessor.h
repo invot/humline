@@ -20,7 +20,12 @@ public:
     //==========================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
+    void reset() override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    /** Bypassed, Humline still has nothing of its own to say: the mic does not
+        become the track's output, and anything it left sounding is released. */
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     bool isBusesLayoutSupported (const BusesLayout&) const override;
 
     juce::AudioProcessorEditor* createEditor() override;
@@ -189,6 +194,10 @@ private:
     void timerCallback() override;
     void mixInputToMono (const juce::AudioBuffer<float>& buffer, int numSamples);
 
+    /** Sends the note-offs the engine still owes, plus all-notes-off on every
+        channel Humline can reach, and forgets the engine's MIDI state. */
+    void silenceMidiOut (juce::MidiBuffer& midi, const Settings& s, int offset);
+
     ParamRefs p;
 
     std::atomic<int>  padNotes[numDrumPads];
@@ -203,6 +212,10 @@ private:
     std::vector<dbc::MidiEvent> blockEvents;
     juce::AudioBuffer<float> sideBuffer;   // the "Instrument" input, mono
     std::vector<dbc::MidiEvent> probeEvents;
+    std::vector<dbc::MidiEvent> silenceEvents;    // scratch for silenceMidiOut, reserved up front
+    std::atomic<bool> pendingSilence { false };   // the next block has to release the old notes
+    bool midiOutWasOn = true;                     // audio thread: an off edge silences
+    bool bypassed     = false;                    // audio thread
 
     std::atomic<int> pendingPreview { -1 };
     int previewNote = -1, previewChannel = 10, previewSamplesLeft = 0;

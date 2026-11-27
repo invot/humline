@@ -38,6 +38,12 @@ public:
         they are detected, so this is 0 there. */
     int getOutputLatencySamples() const noexcept { return (int) lastLatencySamples; }
 
+    /** Sends a note-off (at offset 0) for every note the engine still believes is
+        sounding, and forgets its MIDI state, queued events included. Used when
+        that state is about to go away: MIDI Out switched off, the plugin
+        bypassed or unloaded, a project loaded. */
+    void silence (std::vector<MidiEvent>& midiOut);
+
     DrumClassifier& getClassifier() noexcept { return classifier; }
     const DrumClassifier& getClassifier() const noexcept { return classifier; }
 

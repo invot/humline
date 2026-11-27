@@ -329,6 +329,15 @@ struct Settings
     }
 };
 
+/** The MIDI channel (1-16) that beatbox triggers go out on: channel 10 while
+    "Drums on channel 10" is on, otherwise the drum channel from the Assign page.
+    One helper, so the engine, the pad preview, the instrument check, the
+    all-notes-off and the take export can never disagree about where a drum goes. */
+inline int drumOutChannel (const Settings& s) noexcept
+{
+    return std::clamp (s.drumsOnDrumChan ? 10 : s.drumChannel, 1, 16);
+}
+
 /** A dial's 0..1 reading mapped to its CC value: the input range is stretched to
     fill the dial, then the dial is scaled into the output span. Out-of-range
     readings clamp, and a reversed output span inverts the dial. */

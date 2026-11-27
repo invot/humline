@@ -546,6 +546,36 @@ void VoiceEngine::confirmRun (int64_t frameEnd, const Settings& s)
     live.activeNote = q.note;
 }
 
+void VoiceEngine::silence (std::vector<MidiEvent>& midiOut)
+{
+    // Note-offs for everything the engine was holding, then forget it all: the
+    // state those notes belonged to is going away (MIDI Out off, bypass, unload,
+    // project load), so a note-on that is still waiting to go out is dropped
+    // rather than sent into a state that no longer exists.
+    for (int i = 0; i < activeOutCount; ++i)
+        midiOut.push_back ({ 0, (uint8_t) (0x80 | activeOutChans[i]),
+                             (uint8_t) activeOutNotes[i], 64, false });
+
+    pendingEvents.clear();
+    pendingOnsets.clear();
+
+    activeOutCount = 0;
+    noteOnSent     = false;
+
+    bendChans[0] = bendChans[1] = -1;
+    lastBend  = 8192;
+    bendDev   = 0.0f;
+
+    runActive       = false;
+    runFrames       = 0;
+    runCount        = 0;
+    runOff          = 0;
+    runSum          = 0.0f;
+    liveReleaseAbs  = -1;
+    live.activeNote = -1;
+    live.voiced     = false;
+}
+
 void VoiceEngine::closeRun (int64_t endAbs, const Settings& s)
 {
     if (! runActive)
@@ -695,7 +725,7 @@ void VoiceEngine::emitDrumNote (int pad, int64_t onsetAbs, float energy, const S
     double lenBeats = now ? 0.125 : std::max (gridBeats (s.grid), 0.125);
     const int64_t offAbs = onAbs + (int64_t) std::llround (lenBeats * 60.0 / bpm * sampleRate);
 
-    const int channel = s.drumsOnDrumChan ? s.drumChannel : s.voiceChannel;
+    const int channel = drumOutChannel (s);
     const int ch = std::clamp (channel, 1, 16) - 1;
 
     // Velocity off for this trigger: every hit is full velocity.

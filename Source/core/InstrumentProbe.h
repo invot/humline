@@ -94,8 +94,13 @@ public:
     {
         cancelRequested.store (true);
 
-        if (phase.load() == Phase::Idle)
-            startRequested.store (false);   // never started (no audio running): drop it now
+        startRequested.store (false);   // never asked for, or never started: drop it now
+
+        // A test that has already finished is dropped as well: it was asked for
+        // before this cancel, and analysing it later would overrule the target
+        // being picked now.
+        auto recorded = Phase::Recorded;
+        phase.compare_exchange_strong (recorded, Phase::Idle);
     }
 
     bool isRunning() const noexcept   { return phase.load() == Phase::Running || startRequested.load(); }
