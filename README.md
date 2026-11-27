@@ -165,6 +165,15 @@ the PNGs it writes (all but `key-empty.png`) into `docs/screenshots/`.
 - Everything is saved in the plugin state: parameters, pad notes and velocity
   switches, every trigger take, notes switched off, and custom chords.
 
+## Download
+
+Every push to `main` builds the Windows VST3 and standalone app and publishes
+them as the [**latest**](https://github.com/invot/humline/releases/tag/latest)
+release, replacing the previous build (see
+[`.github/workflows/release.yml`](.github/workflows/release.yml)). The build
+uses the same MinGW toolchain and patched JUCE 6.1.6 as below, and only
+publishes if the tests and smoke test pass.
+
 ## Building
 
 Requires CMake 3.22+ and a C++20 compiler.
@@ -180,7 +189,11 @@ cmake --build build --config Release
 
 JUCE 6.1.6 is the last version that officially supports MinGW; this project is
 pinned to it and carries three small compatibility patches for modern GCC
-(missing `<cstring>`/`<utility>` includes and MinGW's UIAutomation macros):
+(missing `<cstring>`/`<utility>` includes and MinGW's UIAutomation macros).
+The includes are forced with `CMAKE_CXX_FLAGS` below; the UIAutomation fix is
+[`ci/juce-6.1.6-mingw.patch`](ci/juce-6.1.6-mingw.patch), applied to the JUCE
+tree with `git apply` from inside `JUCE-6.1.6`. The compiler is WinLibs GCC
+16.2.0 (UCRT, posix-seh, r3):
 
 ```bash
 cmake -S . -B build/plugin -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release \

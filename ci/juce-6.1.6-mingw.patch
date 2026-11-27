@@ -1,0 +1,65 @@
+--- a/modules/juce_gui_basics/native/accessibility/juce_win32_ComInterfaces.h
++++ b/modules/juce_gui_basics/native/accessibility/juce_win32_ComInterfaces.h
+@@ -120,6 +120,62 @@
+     WindowInteractionState_NotResponding = 4
+ };
+ 
++
++#if defined(__MINGW32__)
++#undef UIA_InvokePatternId
++#undef UIA_SelectionPatternId
++#undef UIA_ValuePatternId
++#undef UIA_RangeValuePatternId
++#undef UIA_ExpandCollapsePatternId
++#undef UIA_GridPatternId
++#undef UIA_GridItemPatternId
++#undef UIA_WindowPatternId
++#undef UIA_SelectionItemPatternId
++#undef UIA_TextPatternId
++#undef UIA_TogglePatternId
++#undef UIA_TransformPatternId
++#undef UIA_TextPattern2Id
++#undef UIA_StructureChangedEventId
++#undef UIA_MenuOpenedEventId
++#undef UIA_AutomationFocusChangedEventId
++#undef UIA_MenuClosedEventId
++#undef UIA_LayoutInvalidatedEventId
++#undef UIA_Invoke_InvokedEventId
++#undef UIA_SelectionItem_ElementSelectedEventId
++#undef UIA_Text_TextSelectionChangedEventId
++#undef UIA_Text_TextChangedEventId
++#undef UIA_Window_WindowOpenedEventId
++#undef UIA_Window_WindowClosedEventId
++#undef UIA_IsPeripheralPropertyId
++#undef UIA_IsReadOnlyAttributeId
++#undef UIA_CaretPositionAttributeId
++#undef UIA_ButtonControlTypeId
++#undef UIA_CheckBoxControlTypeId
++#undef UIA_ComboBoxControlTypeId
++#undef UIA_EditControlTypeId
++#undef UIA_HyperlinkControlTypeId
++#undef UIA_ImageControlTypeId
++#undef UIA_ListItemControlTypeId
++#undef UIA_ListControlTypeId
++#undef UIA_MenuBarControlTypeId
++#undef UIA_MenuItemControlTypeId
++#undef UIA_ProgressBarControlTypeId
++#undef UIA_RadioButtonControlTypeId
++#undef UIA_ScrollBarControlTypeId
++#undef UIA_SliderControlTypeId
++#undef UIA_TextControlTypeId
++#undef UIA_ToolTipControlTypeId
++#undef UIA_TreeControlTypeId
++#undef UIA_TreeItemControlTypeId
++#undef UIA_CustomControlTypeId
++#undef UIA_GroupControlTypeId
++#undef UIA_DataItemControlTypeId
++#undef UIA_WindowControlTypeId
++#undef UIA_HeaderControlTypeId
++#undef UIA_HeaderItemControlTypeId
++#undef UIA_TableControlTypeId
++#endif
++
+ const long UIA_InvokePatternId = 10000;
+ const long UIA_SelectionPatternId = 10001;
+ const long UIA_ValuePatternId = 10002;
