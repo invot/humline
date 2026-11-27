@@ -413,11 +413,13 @@ int main()
             {
                 if (auto* tabBar = dynamic_cast<dbc::ui::TabBar*> (child))
                 {
+                    const char* pageNames[] = { "play", "train", "key-empty", "chords", "notes", "assign" };
+
                     for (int page = 0; page < 6; ++page)
                     {
                         tabBar->setSelected (page, true);
                         const auto image = editor->createComponentSnapshot (editor->getLocalBounds());
-                        juce::File file (snapDir + "/page" + juce::String (page) + ".png");
+                        juce::File file (snapDir + "/" + pageNames[page] + ".png");
                         file.deleteFile();
                         juce::FileOutputStream out (file);
                         juce::PNGImageFormat().writeImageToStream (image, out);
@@ -434,7 +436,7 @@ int main()
                                         dial->onNoteClicked (pc);
 
                     const auto keyImage = editor->createComponentSnapshot (editor->getLocalBounds());
-                    juce::File keyFile (snapDir + "/page2-selected.png");
+                    juce::File keyFile (snapDir + "/key.png");
                     keyFile.deleteFile();
                     juce::FileOutputStream keyOut (keyFile);
                     juce::PNGImageFormat().writeImageToStream (keyImage, keyOut);

@@ -22,7 +22,7 @@ can be unit-tested from a console binary.
 
 The screenshots are rendered by `HumlineSmoke` (see [Tests](#tests)). To
 regenerate them, run it with `HUMLINE_SNAPSHOT_DIR` set to a folder and copy
-the PNGs it writes into `docs/screenshots/`.
+the PNGs it writes (all but `key-empty.png`) into `docs/screenshots/`.
 
 ## What it does
 
