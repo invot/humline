@@ -302,6 +302,8 @@ Tests/smoke.cpp  processor + editor smoke test
 
 ## Licence
 
+Copyright (C) 2026 invot.
+
 Humline is released under the **GNU Affero General Public License v3.0 or later**
 (AGPL-3.0-or-later) — see [LICENSE](LICENSE). This is the licence JUCE 8 itself is
 distributed under for open-source use: JUCE is dual-licensed as AGPLv3 or a paid
