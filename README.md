@@ -204,19 +204,55 @@ cmake --build build --config Release
 
 ### macOS
 
-`AU` is added to the plugin's formats on Apple platforms only, so a macOS build
-writes the Audio Unit next to the VST3:
+`build-macos.sh` builds universal Apple Silicon + Intel VST3, Audio Unit and
+standalone bundles for macOS 11 or newer. It uses Apple Clang and a separate
+`build-macos/` tree, so the Windows build stays usable. `AU` is added to the
+plugin's formats on Apple platforms only, which is why the Audio Unit is built
+next to the VST3: it is the plug-in format macOS hosts load natively.
+
+Install the Xcode command-line tools and CMake 3.22+, then get JUCE 8.0.6 where
+the script looks for it:
 
 ```bash
-cmake -S . -B build -DDBC_JUCE_DIR=<path to JUCE 8> \
-      -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-      -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-cmake --build build -j 8
+xcode-select --install   # if the developer tools are not installed yet
+brew install cmake
+git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git .tools/JUCE-8.0.6
 ```
 
-`build/Humline_artefacts/Release/` then holds `VST3/Humline.vst3`,
-`AU/Humline.component` and `Standalone/Humline.app`. Copy the first two into
-`~/Library/Audio/Plug-Ins/VST3/` and `~/Library/Audio/Plug-Ins/Components/`.
+Then build, test, or check the editor:
+
+```bash
+bash ./build-macos.sh          # VST3, Audio Unit and standalone app
+bash ./build-macos.sh tests    # headless engine checks; JUCE is optional
+bash ./build-macos.sh smoke    # processor/editor checks and screenshots (needs a graphical session)
+bash ./build-macos.sh clean    # remove build-macos/ and rebuild
+```
+
+The build writes:
+
+```text
+build-macos/Humline_artefacts/Release/VST3/Humline.vst3
+build-macos/Humline_artefacts/Release/AU/Humline.component
+build-macos/Humline_artefacts/Release/Standalone/Humline.app
+```
+
+Copy the VST3 into `~/Library/Audio/Plug-Ins/VST3/` and the Audio Unit into
+`~/Library/Audio/Plug-Ins/Components/`, then rescan in your host. The standalone
+app runs from anywhere; drag it into `/Applications` if you want it in
+Launchpad.
+
+Set `HUMLINE_JUCE_DIR=/path/to/JUCE` to use another checkout; the script also
+accepts the `../SightLine/.tools/JUCE-8.0.6` checkout if the local copy is
+absent. Set `HUMLINE_MACOS_ARCHITECTURES=arm64` or `=x86_64` for a single
+architecture, `JOBS=4` to limit build parallelism, or
+`MACOSX_DEPLOYMENT_TARGET` to change the minimum macOS version:
+
+```bash
+HUMLINE_JUCE_DIR="$HOME/JUCE" HUMLINE_MACOS_ARCHITECTURES=arm64 bash ./build-macos.sh
+```
+
+The script makes local builds only: it does not sign, notarise or publish them.
+The macOS bundles in the CI release are ad-hoc signed instead.
 
 ### MinGW-w64 (what this repo was built with)
 
