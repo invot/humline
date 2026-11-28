@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "ui/Logo.h"
 #include "StandaloneBridge.h"
 
 namespace dbc
@@ -88,34 +89,10 @@ void HumlineEditor::paint (juce::Graphics& g)
     g.setColour (pal::header);
     g.fillRoundedRectangle (h, 14.0f);
 
-    // Logo: an H with one line running through it - the hum line doubling as
-    // the letter's crossbar.
-    const float logoSize = 26.0f;
-    auto logo = juce::Rectangle<float> (h.getX() + 16.0f, h.getCentreY() - logoSize * 0.5f, logoSize, logoSize);
-
-    const float stemTop    = logo.getY() + 5.0f;
-    const float stemBottom = logo.getBottom() - 5.0f;
-    const float stemLeft   = logo.getX() + 8.0f;
-    const float stemRight  = logo.getRight() - 8.0f;
-
-    juce::Path letterH;
-    letterH.startNewSubPath (stemLeft, stemTop);
-    letterH.lineTo (stemLeft, stemBottom);
-    letterH.startNewSubPath (stemRight, stemTop);
-    letterH.lineTo (stemRight, stemBottom);
-
-    g.setColour (pal::text);
-    g.strokePath (letterH, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved,
-                                                 juce::PathStrokeType::rounded));
-
-    // The line runs past both stems, so the H reads as crossed by it.
-    juce::Path humLine;
-    humLine.startNewSubPath (logo.getX() + 0.5f, logo.getCentreY());
-    humLine.lineTo (logo.getRight() - 0.5f, logo.getCentreY());
-
-    g.setColour (pal::teal);
-    g.strokePath (humLine, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved,
-                                                 juce::PathStrokeType::rounded));
+    const float logoSize = 30.0f;
+    const auto logo = juce::Rectangle<float> (h.getX() + 14.0f,
+        h.getCentreY() - logoSize * 0.5f, logoSize, logoSize);
+    ioline::branding::drawLogoMark (g, logo);
 
     g.setColour (pal::text);
     g.setFont (uiFont (18.0f, true));
@@ -148,13 +125,13 @@ void HumlineEditor::paint (juce::Graphics& g)
 
     if (norm > 0.01f)
     {
-        g.setColour (db > -3.0f ? pal::pink : pal::teal);
+        g.setColour (db > -3.0f ? pal::coral : pal::orange);
         g.fillRoundedRectangle (meterArea.withWidth (juce::jmax (4.0f, meterArea.getWidth() * norm)), 4.0f);
     }
 
     // MIDI out indicator
     auto midiDot = juce::Rectangle<float> (h.getRight() - 120.0f, h.getCentreY() - 5.0f, 10.0f, 10.0f);
-    g.setColour (pal::purple);
+    g.setColour (pal::gold);
     g.fillEllipse (midiDot);
     g.setColour (pal::text.withAlpha (0.8f));
     g.setFont (uiFont (11.0f, true));
@@ -192,7 +169,7 @@ void HumlineEditor::paint (juce::Graphics& g)
     if (target != InstrumentTarget::None && check.count > 0 && check.result.heardOnMainInput
         && check.result.target == target && ! proc.isStandaloneApp())
     {
-        g.setColour (pal::pink);
+        g.setColour (pal::coral);
         footerText = "The instrument plays into Humline's own input, so Humline may hear it as your voice. "
                      "Send it to the \"Instrument\" input instead.";
     }
@@ -245,7 +222,7 @@ void HumlineEditor::refreshTarget()
     {
         targetButton.setButtonText (text);
         targetButton.setColour (juce::TextButton::buttonColourId,
-                                target == InstrumentTarget::None ? ui::pal::pink.withAlpha (0.55f) : ui::pal::panelHi);
+                                target == InstrumentTarget::None ? ui::pal::coral.withAlpha (0.55f) : ui::pal::panelHi);
         repaint (footerArea);
     }
 

@@ -61,19 +61,19 @@ class PlayPanel : public juce::Component, private juce::Timer
 public:
     explicit PlayPanel (HumlineProcessor& p)
         : proc (p),
-          gain ("Level", pal::teal, " dB"),
-          pitchSnapSlider ("Pitch Snap", pal::pink, " %"),
-          stickySlider ("Stickiness", pal::pink, " %"),
-          strengthSlider ("Strength", pal::teal, " %"),
-          swingSlider ("Swing", pal::teal, " %"),
+          gain ("Level", pal::orange, " dB"),
+          pitchSnapSlider ("Pitch Snap", pal::coral, " %"),
+          stickySlider ("Stickiness", pal::coral, " %"),
+          strengthSlider ("Strength", pal::orange, " %"),
+          swingSlider ("Swing", pal::orange, " %"),
           gridCombo ("Timing Snap"),
           minLenCombo ("Min Length"),
           octaveCombo ("Octave"),
-          pitchOn ("Pitch", pal::pink),
-          triggersOn ("Triggers", pal::teal),
-          chordsOn ("Chords", pal::purple),
-          bendOn ("Pitch Bend", pal::pink),
-          modeSwitch ({ "Live", "Quantised" }, pal::teal)
+          pitchOn ("Pitch", pal::coral),
+          triggersOn ("Triggers", pal::orange),
+          chordsOn ("Chords", pal::gold),
+          bendOn ("Pitch Bend", pal::coral),
+          modeSwitch ({ "Live", "Quantised" }, pal::orange)
     {
         addAndMakeVisible (pads);
         addAndMakeVisible (dial);
@@ -167,10 +167,10 @@ public:
         drawPanel (g, left);
         drawPanel (g, right);
 
-        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "Triggers", pal::teal);
+        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "Triggers", pal::orange);
         const bool drumKit = proc.getTarget() == dbc::InstrumentTarget::DrumKit;
         drawSectionHeader (g, right.toNearestInt().removeFromTop (46).withTrimmedLeft (16),
-                           drumKit ? "Drum kit" : "Instrument", pal::pink);
+                           drumKit ? "Drum kit" : "Instrument", pal::coral);
 
         juce::String hint;
         const bool quantised = currentMode() == dbc::EngineMode::Both;
@@ -353,7 +353,7 @@ public:
         };
 
         learnButton.setButtonText ("Record takes");
-        learnButton.setColour (juce::TextButton::buttonOnColourId, pal::teal);
+        learnButton.setColour (juce::TextButton::buttonOnColourId, pal::orange);
         learnButton.onClick = [this]
         {
             bankFull = false;
@@ -382,7 +382,7 @@ public:
         // Velocity on: hits follow how loud they were. Off: always full velocity.
         velocityButton.setButtonText ("Velocity");
         velocityButton.setClickingTogglesState (true);
-        velocityButton.setColour (juce::TextButton::buttonOnColourId, pal::teal);
+        velocityButton.setColour (juce::TextButton::buttonOnColourId, pal::orange);
         velocityButton.onClick = [this]
         {
             proc.setPadVelocity (pads.getSelected(), velocityButton.getToggleState());
@@ -390,7 +390,7 @@ public:
 
         muteButton.setButtonText ("Mute");
         muteButton.setClickingTogglesState (true);
-        muteButton.setColour (juce::TextButton::buttonOnColourId, pal::pink);
+        muteButton.setColour (juce::TextButton::buttonOnColourId, pal::coral);
         muteButton.onClick = [this]
         {
             const int pad = pads.getSelected();
@@ -433,7 +433,7 @@ public:
             auto& b = quickPicks[i];
             const int note = quickNotes[i];
             b.setButtonText (noteLabel (note) + " / " + juce::String (note) + "   " + gmDrumName (note));
-            b.setColour (juce::TextButton::buttonOnColourId, pal::purple.withAlpha (0.75f));
+            b.setColour (juce::TextButton::buttonOnColourId, pal::gold.withAlpha (0.75f));
             b.onClick = [this, note]
             {
                 proc.setPadNote (pads.getSelected(), note);
@@ -557,10 +557,10 @@ public:
         drawPanel (g, left);
         drawPanel (g, right);
 
-        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "Triggers", pal::teal);
+        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "Triggers", pal::orange);
 
         auto rr = right.toNearestInt();
-        drawSectionHeader (g, rr.removeFromTop (46).withTrimmedLeft (20), "Train", pal::teal);
+        drawSectionHeader (g, rr.removeFromTop (46).withTrimmedLeft (20), "Train", pal::orange);
 
         g.setColour (pal::dim);
         g.setFont (uiFont (12.0f));
@@ -579,7 +579,7 @@ public:
         {
             auto pip = juce::Rectangle<float> ((float) (pipArea.getX() + i * 32), (float) pipArea.getY() + 6.0f,
                                                26.0f, 26.0f);
-            g.setColour (i < takes ? pal::yellow.withAlpha (0.95f) : pal::panelSoft);
+            g.setColour (i < takes ? pal::sand.withAlpha (0.95f) : pal::panelSoft);
             g.fillEllipse (pip);
             g.setColour (i < takes ? juce::Colours::black.withAlpha (0.7f) : pal::dim);
             g.setFont (uiFont (12.0f, true));
@@ -588,7 +588,7 @@ public:
 
         if (bankFull)
         {
-            g.setColour (pal::pink);
+            g.setColour (pal::coral);
             g.setFont (uiFont (11.5f));
             g.drawText ("This trigger already has 12 takes - clear them to record new ones.",
                         juce::Rectangle<float> ((float) pipArea.getX() + (float) maxTakes * 32.0f + 8.0f,
@@ -600,7 +600,7 @@ public:
 
         if (proc.getTarget() != dbc::InstrumentTarget::DrumKit)
         {
-            g.setColour (pal::pink);
+            g.setColour (pal::coral);
             g.setFont (uiFont (11.5f));
             g.drawText ("Triggers play a drum kit - Humline is driving an instrument, so they send nothing.",
                         pickArea.withY (pickArea.getBottom() + 6).withHeight (18).toFloat(),
@@ -801,12 +801,12 @@ class KeyPanel : public juce::Component, private juce::Timer
 public:
     explicit KeyPanel (HumlineProcessor& p)
         : proc (p),
-          pitchSnapSlider ("Pitch Snap", pal::pink, " %"),
-          stickySlider ("Stickiness", pal::pink, " %"),
+          pitchSnapSlider ("Pitch Snap", pal::coral, " %"),
+          stickySlider ("Stickiness", pal::coral, " %"),
           keyCombo ("Key"),
           scaleCombo ("Scale"),
           octaveCombo ("Octave"),
-          keyLock ("Key Lock", pal::purple)
+          keyLock ("Key Lock", pal::gold)
     {
         juce::Component* controls[] { &dial, &keys, &pitchSnapSlider, &stickySlider,
                                       &keyCombo, &scaleCombo, &octaveCombo, &keyLock,
@@ -839,7 +839,7 @@ public:
         };
 
         detectButton.setClickingTogglesState (false);
-        detectButton.setColour (juce::TextButton::buttonOnColourId, pal::pink);
+        detectButton.setColour (juce::TextButton::buttonOnColourId, pal::coral);
         detectButton.onClick = [this] { setListening (! proc.engine.isKeyListening()); };
 
         clearButton.setButtonText ("Clear");
@@ -880,7 +880,7 @@ public:
 
         subsetButton.setButtonText ("Only the selected notes");
         subsetButton.setClickingTogglesState (true);
-        subsetButton.setColour (juce::TextButton::buttonOnColourId, pal::purple);
+        subsetButton.setColour (juce::TextButton::buttonOnColourId, pal::gold);
 
         allNotesButton.setButtonText ("All notes on");
         allNotesButton.onClick = [this] { proc.setNoteMask ((int) dbc::allNotesMask); repaint(); };
@@ -908,8 +908,8 @@ public:
         drawPanel (g, left);
         drawPanel (g, right);
 
-        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "Select Notes", pal::purple);
-        drawSectionHeader (g, right.toNearestInt().removeFromTop (46).withTrimmedLeft (20), "Key Restriction", pal::purple);
+        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "Select Notes", pal::gold);
+        drawSectionHeader (g, right.toNearestInt().removeFromTop (46).withTrimmedLeft (20), "Key Restriction", pal::gold);
 
         g.setColour (pal::dim);
         g.setFont (uiFont (12.0f));
@@ -918,7 +918,7 @@ public:
 
         if (statusText.isNotEmpty())
         {
-            g.setColour (proc.engine.isKeyListening() ? pal::pink : pal::purple);
+            g.setColour (proc.engine.isKeyListening() ? pal::coral : pal::gold);
             g.setFont (uiFont (12.0f, true));
             g.drawFittedText (statusText, statusArea, juce::Justification::centredLeft, 2);
         }
@@ -939,7 +939,7 @@ public:
             ((mask & (1 << i)) != 0 ? notes : off) << dbc::pitchClassName (i) << "  ";
         }
 
-        g.setColour (pal::purple.withAlpha (0.9f));
+        g.setColour (pal::gold.withAlpha (0.9f));
         g.setFont (uiFont (13.0f, true));
         g.drawText ("In key:   " + notes + (off.isNotEmpty() ? "     off:  " + off : juce::String()),
                     notesArea.toFloat().withTrimmedRight (120.0f), juce::Justification::centredLeft, true);
@@ -1167,10 +1167,10 @@ public:
           voicingCombo ("Voicing"),
           octaveCombo ("Fixed octave"),
           channelCombo ("Chord MIDI channel"),
-          chordsOn ("Expand to chords", pal::purple),
-          rootBass ("Root bassline", pal::purple),
-          follow ("Follow sung octave", pal::purple),
-          bendChords ("Bend chords", pal::pink)
+          chordsOn ("Expand to chords", pal::gold),
+          rootBass ("Root bassline", pal::gold),
+          follow ("Follow sung octave", pal::gold),
+          bendChords ("Bend chords", pal::coral)
     {
         juce::Component* controls[] { &chordsOn, &presetCombo, &voicingCombo, &rootBass, &bendChords,
                                       &follow, &octaveCombo, &channelCombo };
@@ -1227,7 +1227,7 @@ public:
         drawPanel (g, right);
 
         drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16),
-                           "Chord Preset", pal::purple);
+                           "Chord Preset", pal::gold);
 
         const int root   = juce::jlimit (0, 11, (int) proc.apvts.getRawParameterValue ("keyRoot")->load());
         const auto scale = (dbc::ScaleType) juce::jlimit (0, (int) dbc::ScaleType::NumScales - 1,
@@ -1235,7 +1235,7 @@ public:
 
         drawSectionHeader (g, right.toNearestInt().removeFromTop (46).withTrimmedLeft (20),
                            juce::String ("Chords in ") + dbc::pitchClassName (root) + " " + dbc::scaleName (scale),
-                           pal::purple);
+                           pal::gold);
 
         g.setColour (pal::dim);
         g.setFont (uiFont (12.0f));
@@ -1370,16 +1370,16 @@ private:
             const auto& c = tile.chord;
             const bool lit = activePc >= 0 && (((c.root % 12) + 12) % 12) == activePc;
 
-            g.setColour (lit ? pal::purple.withAlpha (0.22f) : pal::panelSoft);
+            g.setColour (lit ? pal::gold.withAlpha (0.22f) : pal::panelSoft);
             g.fillRoundedRectangle (r, 10.0f);
-            g.setColour (lit ? pal::purple : pal::stroke);
+            g.setColour (lit ? pal::gold : pal::stroke);
             g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, lit ? 1.6f : 1.0f);
 
             auto inner = r.reduced (14.0f, 10.0f).withTrimmedRight (140.0f);
 
             if (! tile.roman.empty())
             {
-                g.setColour (pal::purple);
+                g.setColour (pal::gold);
                 g.setFont (uiFont (11.0f, true));
                 g.drawText (juce::String::fromUTF8 (tile.roman.c_str()), inner.removeFromTop (14.0f),
                             juce::Justification::topLeft, false);
@@ -1446,19 +1446,19 @@ public:
         : proc (p),
           voiceChan ("Voice Channel"),
           drumChan ("Drum Channel"),
-          velocitySlider ("Velocity", pal::teal, " %"),
-          drumsOnChan ("Drums on channel 10", pal::purple),
-          sendCC ("Send CC", pal::yellow),
-          dialA ("aaa", pal::pink),
-          dialE ("eee", pal::pink),
-          dialO ("ooo", pal::pink),
-          dialEnv ("env", pal::yellow),
+          velocitySlider ("Velocity", pal::orange, " %"),
+          drumsOnChan ("Drums on channel 10", pal::gold),
+          sendCC ("Send CC", pal::sand),
+          dialA ("aaa", pal::coral),
+          dialE ("eee", pal::coral),
+          dialO ("ooo", pal::coral),
+          dialEnv ("env", pal::sand),
           ccA ("CC"), ccE ("CC"), ccO ("CC"), ccEnv ("CC"),
-          midiOut ("MIDI Out", pal::yellow),
+          midiOut ("MIDI Out", pal::sand),
           bendType ("Pitch bend type"),
           bendRange ("Bend range"),
-          inA ("Input", pal::pink), inE ("Input", pal::pink), inO ("Input", pal::pink), inEnv ("Input", pal::yellow),
-          outA ("CC out", pal::pink), outE ("CC out", pal::pink), outO ("CC out", pal::pink), outEnv ("CC out", pal::yellow)
+          inA ("Input", pal::coral), inE ("Input", pal::coral), inO ("Input", pal::coral), inEnv ("Input", pal::sand),
+          outA ("CC out", pal::coral), outE ("CC out", pal::coral), outO ("CC out", pal::coral), outEnv ("CC out", pal::sand)
     {
         juce::Component* controls[] { &voiceChan, &drumChan, &velocitySlider, &drumsOnChan, &sendCC,
                                       &dialA, &dialE, &dialO, &dialEnv, &ccA, &ccE, &ccO, &ccEnv,
@@ -1517,8 +1517,8 @@ public:
         drawPanel (g, left);
         drawPanel (g, right);
 
-        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "MIDI Output", pal::teal);
-        drawSectionHeader (g, right.toNearestInt().removeFromTop (46).withTrimmedLeft (20), "CC Dials", pal::yellow);
+        drawSectionHeader (g, left.toNearestInt().removeFromTop (46).withTrimmedLeft (16), "MIDI Output", pal::orange);
+        drawSectionHeader (g, right.toNearestInt().removeFromTop (46).withTrimmedLeft (20), "CC Dials", pal::sand);
 
         drawCaption (g, chanCaption, "Midi output channels");
         drawCaption (g, velCaption, "Velocity");
@@ -1796,7 +1796,7 @@ public:
         {
             const auto& pn = placed[i];
             const bool hot = (int) i == hovered;
-            const auto colour = notes[pn.index].drum ? pal::teal : pal::pink;
+            const auto colour = notes[pn.index].drum ? pal::orange : pal::coral;
 
             g.setColour (hot ? colour.brighter (0.35f) : colour.withAlpha (0.9f));
             g.fillRoundedRectangle (pn.rect, 2.0f);
@@ -2032,7 +2032,7 @@ public:
     {
         auto b = getLocalBounds().toFloat().reduced (0.5f);
 
-        g.setColour (active ? pal::purple.withAlpha (0.16f) : pal::panelSoft);
+        g.setColour (active ? pal::gold.withAlpha (0.16f) : pal::panelSoft);
         g.fillRoundedRectangle (b, 10.0f);
 
         const float dashes[] { 5.0f, 4.0f };
@@ -2040,7 +2040,7 @@ public:
         outline.addRoundedRectangle (b, 10.0f);
         juce::Path dashed;
         juce::PathStrokeType (1.2f).createDashedStroke (dashed, outline, dashes, 2);
-        g.setColour (active ? pal::purple : pal::stroke);
+        g.setColour (active ? pal::gold : pal::stroke);
         g.fillPath (dashed);
 
         auto text = b.reduced (14.0f, 8.0f);
@@ -2081,8 +2081,8 @@ class NotesPanel : public juce::Component, private juce::Timer
 public:
     explicit NotesPanel (HumlineProcessor& p)
         : proc (p),
-          filterChoice ({ "All", "Voice", "Drums" }, pal::purple),
-          passInput ("Pass input", pal::teal)
+          filterChoice ({ "All", "Voice", "Drums" }, pal::gold),
+          passInput ("Pass input", pal::orange)
     {
         addAndMakeVisible (grid);
         addAndMakeVisible (filterChoice);
@@ -2134,9 +2134,9 @@ public:
         drawPanel (g, leftPanel.toFloat());
         drawPanel (g, rightPanel.toFloat());
 
-        drawSectionHeader (g, leftPanel.withHeight (46).withTrimmedLeft (16), "Take", pal::pink);
-        drawSectionHeader (g, exportHeader, "Export", pal::purple);
-        drawSectionHeader (g, routingHeader, "Routing", pal::teal);
+        drawSectionHeader (g, leftPanel.withHeight (46).withTrimmedLeft (16), "Take", pal::coral);
+        drawSectionHeader (g, exportHeader, "Export", pal::gold);
+        drawSectionHeader (g, routingHeader, "Routing", pal::orange);
 
         g.setColour (pal::dim);
         g.setFont (uiFont (11.5f));

@@ -15,11 +15,13 @@ namespace pal
     inline const juce::Colour stroke    { 0xff36363c };
     inline const juce::Colour text      { 0xffe8e8ec };
     inline const juce::Colour dim       { 0xff8c8c94 };
-    inline const juce::Colour teal      { 0xff4fd8c8 };
-    inline const juce::Colour pink      { 0xffff8a9b };
-    inline const juce::Colour purple    { 0xffa99bff };
-    inline const juce::Colour yellow    { 0xfff3e3a6 };
-    inline const juce::Colour amber     { 0xffe9b06a };
+    // ioline's humline brand colour, taken from Assets/icon.svg: #ffa452, plus
+    // three warmer tints so each page still has its own hue.
+    inline const juce::Colour orange    { 0xffffa452 };
+    inline const juce::Colour coral     { 0xffff7a5c };
+    inline const juce::Colour gold      { 0xffffcf8a };
+    inline const juce::Colour sand      { 0xffffe6b8 };
+    inline const juce::Colour amber     { 0xffe8863f };
 }
 
 inline juce::Font uiFont (float height, bool bold = false)
@@ -69,7 +71,7 @@ public:
         setColour (juce::ResizableWindow::backgroundColourId, pal::bg);
         setColour (juce::PopupMenu::backgroundColourId, pal::panelSoft);
         setColour (juce::PopupMenu::textColourId, pal::text);
-        setColour (juce::PopupMenu::highlightedBackgroundColourId, pal::purple.withAlpha (0.35f));
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, pal::gold.withAlpha (0.35f));
         setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
 
         setColour (juce::ComboBox::backgroundColourId, pal::panelSoft);
@@ -81,14 +83,14 @@ public:
         setColour (juce::TextEditor::backgroundColourId, pal::panelSoft);
         setColour (juce::TextEditor::textColourId, pal::text);
         setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-        setColour (juce::TextEditor::focusedOutlineColourId, pal::purple);
+        setColour (juce::TextEditor::focusedOutlineColourId, pal::gold);
 
         setColour (juce::Slider::backgroundColourId, pal::stroke);
-        setColour (juce::Slider::trackColourId, pal::teal.withAlpha (0.6f));
-        setColour (juce::Slider::thumbColourId, pal::teal);
+        setColour (juce::Slider::trackColourId, pal::orange.withAlpha (0.6f));
+        setColour (juce::Slider::thumbColourId, pal::orange);
 
         setColour (juce::TextButton::buttonColourId, pal::panelSoft);
-        setColour (juce::TextButton::buttonOnColourId, pal::purple);
+        setColour (juce::TextButton::buttonOnColourId, pal::gold);
         setColour (juce::TextButton::textColourOffId, pal::text);
         setColour (juce::TextButton::textColourOnId, juce::Colours::black);
     }

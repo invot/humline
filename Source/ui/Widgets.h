@@ -270,18 +270,18 @@ public:
             juce::Colour base = sel ? pal::panelHi.brighter (0.25f) : pal::panelSoft;
 
             if (f > 0.01f)
-                base = base.interpolatedWith (pal::teal, juce::jlimit (0.0f, 0.8f, f));
+                base = base.interpolatedWith (pal::orange, juce::jlimit (0.0f, 0.8f, f));
 
             g.setColour (base);
             g.fillRoundedRectangle (r, 10.0f);
 
             if (sel)
             {
-                g.setColour (pal::purple);
+                g.setColour (pal::gold);
                 g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, 1.6f);
             }
 
-            g.setColour (muted[i] ? pal::dim.withAlpha (0.5f) : pal::teal.withAlpha (sel ? 1.0f : 0.85f));
+            g.setColour (muted[i] ? pal::dim.withAlpha (0.5f) : pal::orange.withAlpha (sel ? 1.0f : 0.85f));
             g.setFont (uiFont (13.5f));
             g.drawFittedText (names[i].isEmpty() ? "Pad " + juce::String (i + 1) : names[i],
                               r.reduced (12.0f, 8.0f).toNearestInt(),
@@ -410,11 +410,11 @@ public:
             juce::Colour c = pal::panelSoft;
 
             if (i == activePc)
-                c = pal::pink;
+                c = pal::coral;
             else if (selectedNotes[(size_t) i])
-                c = pal::purple.withAlpha (0.85f);
+                c = pal::gold.withAlpha (0.85f);
             else if (energies[i] > 0.05f)
-                c = pal::pink.withAlpha (juce::jlimit (0.10f, 0.55f, energies[i] * 0.6f));
+                c = pal::coral.withAlpha (juce::jlimit (0.10f, 0.55f, energies[i] * 0.6f));
             else
                 c = pal::panelSoft.brighter (0.08f);
 
@@ -439,7 +439,7 @@ public:
             juce::Path needle;
             needle.startNewSubPath (centre.x + std::cos (am) * R * 0.20f, centre.y + std::sin (am) * R * 0.20f);
             needle.lineTo (centre.x + std::cos (am) * R * 0.94f, centre.y + std::sin (am) * R * 0.94f);
-            g.setColour (pal::pink.withAlpha (0.85f));
+            g.setColour (pal::coral.withAlpha (0.85f));
             g.strokePath (needle, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved,
                                                         juce::PathStrokeType::rounded));
         }
@@ -584,12 +584,12 @@ public:
             const bool current = k.root == root && k.scale == scale;
             const bool hover = (int) i == hoverRow;
 
-            g.setColour (current ? pal::purple.withAlpha (0.22f) : (hover ? pal::panelHi : pal::panelSoft));
+            g.setColour (current ? pal::gold.withAlpha (0.22f) : (hover ? pal::panelHi : pal::panelSoft));
             g.fillRoundedRectangle (r, 8.0f);
 
             if (current)
             {
-                g.setColour (pal::purple);
+                g.setColour (pal::gold);
                 g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.4f);
             }
 
@@ -603,7 +603,7 @@ public:
             g.drawText (dbc::scaleName (k.scale), inner.removeFromLeft (110.0f), juce::Justification::centredLeft, false);
 
             auto right = inner.removeFromRight (90.0f);
-            g.setColour (current ? pal::purple : pal::dim);
+            g.setColour (current ? pal::gold : pal::dim);
             g.setFont (uiFont (11.5f, true));
             g.drawText (current ? "current key" : (hover ? "apply" : juce::String (juce::roundToInt (k.match * 100.0f)) + "% in key"),
                         right, juce::Justification::centredRight, false);
@@ -614,7 +614,7 @@ public:
 
             for (int d = 0; d < 8; ++d)
             {
-                g.setColour (d < filled ? pal::pink : pal::stroke);
+                g.setColour (d < filled ? pal::coral : pal::stroke);
                 g.fillEllipse (inner.getX() + (float) d * (dot + 4.0f), inner.getCentreY() - dot * 0.5f, dot, dot);
             }
         }
@@ -742,20 +742,20 @@ public:
             juce::Colour c (0xffd3d3d8);
 
             if (keyOn && isAllowed (n))
-                c = c.interpolatedWith (pal::purple, 0.55f);
+                c = c.interpolatedWith (pal::gold, 0.55f);
 
             if (keyOn && isAllowed (n) && (((n % 12) + 12) % 12) == keyRoot)
-                c = c.interpolatedWith (pal::purple, 0.85f);
+                c = c.interpolatedWith (pal::gold, 0.85f);
 
             if (n == active)
-                c = pal::pink;
+                c = pal::coral;
 
             g.setColour (c);
             g.fillRect (r.reduced (0.6f, 0.0f));
 
             if (isSwitchedOff (n))
             {
-                g.setColour (pal::purple.withAlpha (0.7f));
+                g.setColour (pal::gold.withAlpha (0.7f));
                 g.drawLine (r.getX() + w * 0.25f, r.getBottom() - 22.0f, r.getRight() - w * 0.25f, r.getBottom() - 30.0f, 1.5f);
             }
 
@@ -790,12 +790,12 @@ public:
             juce::Colour c (0xff17171a);
 
             if (keyOn && isAllowed (n))
-                c = c.interpolatedWith (pal::purple, 0.45f);
+                c = c.interpolatedWith (pal::gold, 0.45f);
             else if (isSwitchedOff (n))
-                c = c.interpolatedWith (pal::purple, 0.15f);
+                c = c.interpolatedWith (pal::gold, 0.15f);
 
             if (n == active)
-                c = pal::pink.darker (0.25f);
+                c = pal::coral.darker (0.25f);
 
             g.setColour (c);
             g.fillRoundedRectangle (r, 2.0f);
@@ -1076,11 +1076,11 @@ public:
                                                      b.getBottom() - 6.0f, b.getY() + 6.0f);
             const float len = juce::jlimit (cellW * 0.6f, cellW * 2.2f, cellW * (float) n.lengthBeats);
 
-            g.setColour (n.drum ? pal::teal.withAlpha (0.85f) : pal::pink.withAlpha (0.9f));
+            g.setColour (n.drum ? pal::orange.withAlpha (0.85f) : pal::coral.withAlpha (0.9f));
             g.fillRoundedRectangle (x, noteY - noteH * 0.5f, len, noteH, 1.5f);
         }
 
-        g.setColour (pal::purple.withAlpha (0.5f));
+        g.setColour (pal::gold.withAlpha (0.5f));
         g.drawLine (b.getRight() - 4.0f, b.getY() + 3.0f, b.getRight() - 4.0f, b.getBottom() - 3.0f, 1.0f);
     }
 

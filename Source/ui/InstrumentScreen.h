@@ -22,7 +22,7 @@ public:
             b->setMouseCursor (juce::MouseCursor::PointingHandCursor);
         }
 
-        checkButton.setColour (juce::TextButton::buttonColourId, pal::teal.withAlpha (0.85f));
+        checkButton.setColour (juce::TextButton::buttonColourId, pal::orange.withAlpha (0.85f));
         checkButton.setTooltip ("Plays your instrument three short test notes and listens for the answer. "
                                 "Paused while the transport plays, so no test notes land in a recording.");
         checkButton.onClick = [this] { proc.startInstrumentCheck(); refresh(); };
@@ -55,7 +55,7 @@ public:
         for (int i = 0; glyphHeight() > 0 && i < 3; ++i)
         {
             auto key = glyph.withWidth (28.0f).withX (glyph.getX() + (float) i * 34.0f);
-            g.setColour (i == 1 ? pal::teal : pal::panelSoft);
+            g.setColour (i == 1 ? pal::orange : pal::panelSoft);
             g.fillRoundedRectangle (key, 6.0f);
         }
 
@@ -136,7 +136,7 @@ private:
         if (proc.isCheckingInstrument())
         {
             text = "Listening for an instrument...";
-            colour = pal::teal;
+            colour = pal::orange;
         }
         else if (proc.isTransportPlaying())
         {
@@ -147,7 +147,7 @@ private:
             const int secs = juce::jmax (0, (int) (juce::Time::getCurrentTime() - last.when).inSeconds());
             text = "Nothing answered the last check (" + juce::String (secs) + " s ago). "
                    "Humline checks again every few seconds.";
-            colour = pal::pink;
+            colour = pal::coral;
 
             if (! proc.hasInstrumentInput() && ! proc.isStandaloneApp())
                 text << "\nHumline's \"Instrument\" input is not connected, so it can only hear its main input.";
