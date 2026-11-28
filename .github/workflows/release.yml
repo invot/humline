@@ -1,11 +1,17 @@
-# Builds the Windows VST3, standalone app and installer on every push to main
-# and publishes them as the single rolling release "latest". The release sits on
-# one tag, also called "latest", which is moved to the newest commit each time, so
-# no version tags pile up.
+# Builds the Windows VST3, standalone app and installer, and the macOS VST3,
+# Audio Unit and standalone app on every push to main, then publishes them as
+# the single rolling release "latest". The release sits on one tag, also called
+# "latest", which is moved to the newest commit each time, so no version tags
+# pile up.
 #
-# The toolchain matches the local build exactly: WinLibs GCC 16.2.0 (UCRT,
-# posix-seh, r3) and JUCE 6.1.6 with ci/juce-6.1.6-mingw.patch, both pinned by
-# SHA-256.
+# The Windows toolchain matches the local build exactly: WinLibs GCC 16.2.0
+# (UCRT, posix-seh, r3) and JUCE 6.1.6 with ci/juce-6.1.6-mingw.patch, both
+# pinned by SHA-256.
+#
+# macOS uses the runner's Xcode compiler and JUCE 8.0.6 (6.1.6 predates the
+# current macOS SDKs). Each bundle is universal - arm64 for Apple Silicon and
+# x86_64 for Intel - and the Audio Unit is built there as well as the VST3,
+# because that is the plugin format macOS hosts load natively.
 
 name: Release latest
 
@@ -27,6 +33,8 @@ env:
   WINLIBS_SHA256: 3c69305081e4a647144339a936244fcf7d3d9e558319e1ad7be2cd2886d4b6a1
   JUCE_URL: https://github.com/juce-framework/JUCE/archive/refs/tags/6.1.6.zip
   JUCE_SHA256: e861d5a6362f4abcc667e518afe6859717be4aaeea6a44eff85629457d534648
+  JUCE_MACOS_URL: https://github.com/juce-framework/JUCE/archive/refs/tags/8.0.6.zip
+  JUCE_MACOS_SHA256: 89e32f3d989d43e87bec3bac82bb6ea19e58d96b14853c41a8151071598ba613
 
 jobs:
   windows:
@@ -119,17 +127,124 @@ jobs:
           "$iscc" installer/humline.iss
           ls -la dist
 
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: dist
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        id: juce-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/JUCE-8.0.6
+          key: juce-macos-${{ env.JUCE_MACOS_SHA256 }}
+
+      - name: Download JUCE
+        if: steps.juce-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o juce.zip "$JUCE_MACOS_URL"
+          echo "$JUCE_MACOS_SHA256  juce.zip" | shasum -a 256 -c -
+          unzip -q juce.zip
+          rm juce.zip
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          # Universal: one download runs on Apple Silicon and Intel Macs.
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DDBC_JUCE_DIR="$RUNNER_TEMP/JUCE-8.0.6"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --build build --target Humline_VST3 Humline_AU Humline_Standalone HumlineTests HumlineSmoke -j 4
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          ./build/HumlineTests
+          ./build/HumlineSmoke
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          out=build/Humline_artefacts/Release
+          for bundle in VST3/Humline.vst3 AU/Humline.component Standalone/Humline.app; do
+            test -d "$out/$bundle" || { echo "missing $bundle"; exit 1; }
+          done
+          bin="$out/VST3/Humline.vst3/Contents/MacOS/Humline"
+          if [ -f "$bin" ]; then lipo -info "$bin"; fi
+
+          mkdir -p dist
+
+          # Ad-hoc signature: the bundles are unsigned, and macOS wants a
+          # signature on the arm64 slices before it will load them.
+          codesign --force --sign - "$out/VST3/Humline.vst3"
+          codesign --force --sign - "$out/AU/Humline.component"
+          codesign --force --sign - "$out/Standalone/Humline.app"
+
+          # ditto keeps bundle resources and permissions intact, zip does not.
+          ditto -c -k --keepParent "$out/VST3/Humline.vst3"      dist/Humline-VST3-macOS.zip
+          ditto -c -k --keepParent "$out/AU/Humline.component"   dist/Humline-AU-macOS.zip
+          ditto -c -k --keepParent "$out/Standalone/Humline.app" dist/Humline-Standalone-macOS.zip
+          ls -la dist
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dist
+          path: dist
+          if-no-files-found: error
+
+  # Both platforms have to pass before anything is published, and one job does
+  # the publishing so the two builds cannot race over the same release.
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect the built files
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          ls -la dist
           short="$(git rev-parse --short HEAD)"
           {
             echo "Built automatically from \`$short\` on \`main\`: $(git log -1 --format=%s)"
             echo
-            echo "- **Humline-Setup-Windows.exe**: installs the standalone app and \`Humline.vst3\` into \`C:\Program Files\Common Files\VST3\`."
-            echo "- **Humline-VST3-Windows.zip**: the VST3 bundle on its own; unzip into \`C:\Program Files\Common Files\VST3\`."
+            echo "- **Humline-Setup-Windows.exe**: installs the Windows standalone app and \`Humline.vst3\` into \`C:\\Program Files\\Common Files\\VST3\`."
+            echo "- **Humline-VST3-Windows.zip**: the Windows VST3 bundle on its own; unzip into \`C:\\Program Files\\Common Files\\VST3\`."
+            echo "- **Humline-AU-macOS.zip**: the Audio Unit (macOS's native plugin format); unzip into \`~/Library/Audio/Plug-Ins/Components\`."
+            echo "- **Humline-VST3-macOS.zip**: the same plugin as VST3; unzip into \`~/Library/Audio/Plug-Ins/VST3\`."
+            echo "- **Humline-Standalone-macOS.zip**: the macOS standalone app on its own."
+            echo
+            echo "The macOS bundles are universal (Apple Silicon and Intel) and ad-hoc signed, not notarised: if macOS blocks one, allow it in System Settings -> Privacy & Security."
             echo
             echo "This release is replaced on every push to \`main\`."
           } > notes.md
@@ -142,5 +257,4 @@ jobs:
             --title "latest" \
             --notes-file notes.md \
             --latest \
-            dist/Humline-Setup-Windows.exe \
-            dist/Humline-VST3-Windows.zip
+            dist/*

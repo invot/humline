@@ -174,12 +174,22 @@ the PNGs it writes (all but `key-empty.png`) into `docs/screenshots/`.
 
 ## Download
 
-Every push to `main` builds the Windows VST3, standalone app and an installer,
-and publishes them as the [**latest**](https://github.com/invot/humline/releases/tag/latest)
-release, replacing the previous build (see
-[`.github/workflows/release.yml`](.github/workflows/release.yml)). The build
-uses the same MinGW toolchain and patched JUCE 6.1.6 as below, and only
-publishes if the tests and smoke test pass.
+Every push to `main` builds both platforms and publishes them as the
+[**latest**](https://github.com/invot/humline/releases/tag/latest) release,
+replacing the previous build (see
+[`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+- **Windows**: `Humline-Setup-Windows.exe` (installs the standalone app and the
+  VST3) and `Humline-VST3-Windows.zip`.
+- **macOS**: `Humline-VST3-macOS.zip`, `Humline-AU-macOS.zip` and
+  `Humline-Standalone-macOS.zip`. The Audio Unit (`.component`) is macOS's
+  native plugin format — the equivalent of VST3 there, and what every macOS
+  host loads — so it is built alongside the VST3. Both bundles are universal
+  (Apple Silicon and Intel) and ad-hoc signed.
+
+The Windows build uses the same MinGW toolchain and patched JUCE 6.1.6 as
+below; the macOS build uses the runner's Xcode compiler and JUCE 8.0.6. Nothing
+is published unless the tests and the smoke test pass on both platforms.
 
 ## Building
 
@@ -191,6 +201,22 @@ Requires CMake 3.22+ and a C++20 compiler.
 cmake -S . -B build -G "Visual Studio 17 2022" -DDBC_JUCE_DIR=<path to JUCE 6.1.6 or 7/8>
 cmake --build build --config Release
 ```
+
+### macOS
+
+`AU` is added to the plugin's formats on Apple platforms only, so a macOS build
+writes the Audio Unit next to the VST3:
+
+```bash
+cmake -S . -B build -DDBC_JUCE_DIR=<path to JUCE 8> \
+      -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake --build build -j 8
+```
+
+`build/Humline_artefacts/Release/` then holds `VST3/Humline.vst3`,
+`AU/Humline.component` and `Standalone/Humline.app`. Copy the first two into
+`~/Library/Audio/Plug-Ins/VST3/` and `~/Library/Audio/Plug-Ins/Components/`.
 
 ### MinGW-w64 (what this repo was built with)
 

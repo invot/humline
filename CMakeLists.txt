@@ -18,6 +18,14 @@ endif()
 
 set(DBC_JUCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.tools/JUCE-8.0.6" CACHE PATH "JUCE source tree")
 
+# VST3 everywhere, plus the Audio Unit on macOS: that is the plugin format macOS
+# hosts load natively, the equivalent of VST3 on that platform.
+set(DBC_PLUGIN_FORMATS VST3 Standalone)
+
+if (APPLE)
+    list(APPEND DBC_PLUGIN_FORMATS AU)
+endif()
+
 set(DBC_CORE_SOURCES
     Source/core/Chords.cpp
     Source/core/DrumClassifier.cpp
@@ -45,6 +53,13 @@ endif()
 if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
     add_subdirectory("${DBC_JUCE_DIR}" "${CMAKE_BINARY_DIR}/juce" EXCLUDE_FROM_ALL)
 
+    # macOS will not let a bundle open the microphone without a usage string.
+    if (APPLE)
+        set(DBC_PERMISSION_ARGS
+            MICROPHONE_PERMISSION_ENABLED TRUE
+            MICROPHONE_PERMISSION_TEXT   "Humline listens to your microphone and turns singing or beatboxing into MIDI.")
+    endif()
+
     juce_add_plugin(Humline
         COMPANY_NAME              "Codebuff"
         BUNDLE_ID                 "com.codebuff.humline"
@@ -60,9 +75,10 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
         IS_MIDI_EFFECT            FALSE
         EDITOR_WANTS_KEYBOARD_FOCUS FALSE
         COPY_PLUGIN_AFTER_BUILD   FALSE
-        FORMATS                   VST3 Standalone
+        FORMATS                   ${DBC_PLUGIN_FORMATS}
         VST3_CATEGORIES           "Fx"
-        AAX_CATEGORY              AAX_ePlugInCategory_None)
+        AAX_CATEGORY              AAX_ePlugInCategory_None
+        ${DBC_PERMISSION_ARGS})
 
     target_sources(Humline PRIVATE
         Source/PluginProcessor.cpp
@@ -86,10 +102,12 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 
-    if (NOT MSVC)
+    if (NOT MSVC AND NOT APPLE)
         # A plugin gets loaded by a host that knows nothing about our toolchain,
         # so the runtimes have to be inside the binary. JUCE does the final link
-        # on the per-format targets, so the flags go there.
+        # on the per-format targets, so the flags go there. macOS has no static
+        # C/C++ runtime to link (and its linker rejects -static), so this is for
+        # MinGW and Linux only.
         foreach (dbcTarget Humline Humline_VST3 Humline_Standalone)
             if (TARGET ${dbcTarget})
                 target_link_options(${dbcTarget} PRIVATE -static -static-libgcc -static-libstdc++)
@@ -114,7 +132,7 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
     target_link_libraries(HumlineSmoke PRIVATE
         juce::juce_audio_utils
         juce::juce_recommended_config_flags)
-    if (NOT MSVC)
+    if (NOT MSVC AND NOT APPLE)
         target_link_options(HumlineSmoke PRIVATE -static -static-libgcc -static-libstdc++)
     endif()
     set_target_properties(HumlineSmoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
