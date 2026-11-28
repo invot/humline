@@ -18,13 +18,6 @@ endif()
 
 set(DBC_JUCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.tools/JUCE-8.0.6" CACHE PATH "JUCE source tree")
 
-# VST3 everywhere, plus the Audio Unit on macOS: that is the plugin format macOS
-# hosts load natively, the equivalent of VST3 on that platform.
-set(DBC_PLUGIN_FORMATS VST3 Standalone)
-
-if (APPLE)
-    list(APPEND DBC_PLUGIN_FORMATS AU)
-endif()
 
 set(DBC_CORE_SOURCES
     Source/core/Chords.cpp
@@ -75,7 +68,7 @@ if (EXISTS "${DBC_JUCE_DIR}/CMakeLists.txt")
         IS_MIDI_EFFECT            FALSE
         EDITOR_WANTS_KEYBOARD_FOCUS FALSE
         COPY_PLUGIN_AFTER_BUILD   FALSE
-        FORMATS                   ${DBC_PLUGIN_FORMATS}
+        FORMATS                   VST3 AU Standalone
         VST3_CATEGORIES           "Fx"
         AAX_CATEGORY              AAX_ePlugInCategory_None
         ${DBC_PERMISSION_ARGS})

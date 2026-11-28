@@ -181,11 +181,8 @@ replacing the previous build (see
 
 - **Windows**: `Humline-Setup-Windows.exe` (installs the standalone app and the
   VST3) and `Humline-VST3-Windows.zip`.
-- **macOS**: `Humline-VST3-macOS.zip`, `Humline-AU-macOS.zip` and
-  `Humline-Standalone-macOS.zip`. The Audio Unit (`.component`) is macOS's
-  native plugin format — the equivalent of VST3 there, and what every macOS
-  host loads — so it is built alongside the VST3. Both bundles are universal
-  (Apple Silicon and Intel) and ad-hoc signed.
+- **macOS** `humline-macOS.zip` contains the VST3, Audio Unit, and standalone
+  app. Individual macOS ZIPs are also available.
 
 The Windows build uses the same MinGW toolchain and patched JUCE 6.1.6 as
 below; the macOS build uses the runner's Xcode compiler and JUCE 8.0.6. Nothing
@@ -204,55 +201,40 @@ cmake --build build --config Release
 
 ### macOS
 
-`build-macos.sh` builds universal Apple Silicon + Intel VST3, Audio Unit and
-standalone bundles for macOS 11 or newer. It uses Apple Clang and a separate
-`build-macos/` tree, so the Windows build stays usable. `AU` is added to the
-plugin's formats on Apple platforms only, which is why the Audio Unit is built
-next to the VST3: it is the plug-in format macOS hosts load natively.
+Download `humline-macOS.zip` for macOS 11 or later on Apple Silicon or Intel.
+It contains the VST3, Audio Unit, and standalone app. The bundles are ad-hoc
+signed. [Latest release](https://github.com/invot/humline/releases/latest)
 
-Install the Xcode command-line tools and CMake 3.22+, then get JUCE 8.0.6 where
-the script looks for it:
+- For Logic Pro and GarageBand, copy the complete `Humline.component` to
+  `~/Library/Audio/Plug-Ins/Components/`, then reopen the host. To validate the
+  installed Audio Unit in Terminal, run `auval -v aumf Hmln Cdbx`.
+- For VST3 hosts, copy `Humline.vst3` to `~/Library/Audio/Plug-Ins/VST3/` and rescan.
+- To run the standalone app, open `Humline.app` or copy it to `/Applications`.
 
-```bash
-xcode-select --install   # if the developer tools are not installed yet
-brew install cmake
+The individual `Humline-VST3-macOS.zip`, `Humline-AU-macOS.zip`, and
+`Humline-Standalone-macOS.zip` downloads are also available.
+
+To build locally, install the Xcode Command Line Tools (`xcode-select --install`),
+CMake 3.22 or later, and JUCE 8.0.6. Set `HUMLINE_JUCE_DIR` to an existing JUCE
+checkout or use `.tools/JUCE-8.0.6`.
+
+```sh
 git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git .tools/JUCE-8.0.6
 ```
 
-Then build, test, or check the editor:
-
-```bash
-bash ./build-macos.sh          # VST3, Audio Unit and standalone app
-bash ./build-macos.sh tests    # headless engine checks; JUCE is optional
-bash ./build-macos.sh smoke    # processor/editor checks and screenshots (needs a graphical session)
-bash ./build-macos.sh clean    # remove build-macos/ and rebuild
+```sh
+bash build-macos.sh build       # build and package all three formats
+bash build-macos.sh tests       # run the headless checks; JUCE is optional
+bash build-macos.sh smoke       # run the editor checks and render screenshots
+bash build-macos.sh clean build # remove the macOS build tree before building
 ```
 
-The build writes:
-
-```text
-build-macos/Humline_artefacts/Release/VST3/Humline.vst3
-build-macos/Humline_artefacts/Release/AU/Humline.component
-build-macos/Humline_artefacts/Release/Standalone/Humline.app
-```
-
-Copy the VST3 into `~/Library/Audio/Plug-Ins/VST3/` and the Audio Unit into
-`~/Library/Audio/Plug-Ins/Components/`, then rescan in your host. The standalone
-app runs from anywhere; drag it into `/Applications` if you want it in
-Launchpad.
-
-Set `HUMLINE_JUCE_DIR=/path/to/JUCE` to use another checkout; the script also
-accepts the `../SightLine/.tools/JUCE-8.0.6` checkout if the local copy is
-absent. Set `HUMLINE_MACOS_ARCHITECTURES=arm64` or `=x86_64` for a single
-architecture, `JOBS=4` to limit build parallelism, or
-`MACOSX_DEPLOYMENT_TARGET` to change the minimum macOS version:
-
-```bash
-HUMLINE_JUCE_DIR="$HOME/JUCE" HUMLINE_MACOS_ARCHITECTURES=arm64 bash ./build-macos.sh
-```
-
-The script makes local builds only: it does not sign, notarise or publish them.
-The macOS bundles in the CI release are ad-hoc signed instead.
+The bundles are under `build-macos/Humline_artefacts/Release/` in `VST3/`, `AU/`,
+and `Standalone/`. The script copies the Audio Unit to `dist/Humline.component`
+and writes `dist/humline-macOS.zip`. Set `HUMLINE_MACOS_ARCHITECTURES=arm64` or
+`x86_64` for a single-architecture build. Set `JOBS` or pass a job count as the
+second argument to control build parallelism. `MACOSX_DEPLOYMENT_TARGET` defaults
+to `11.0`.
 
 ### MinGW-w64 (what this repo was built with)
 
@@ -319,7 +301,7 @@ survive a save and load.
 
 ## Using it in a DAW
 
-Humline is a VST3 that hosts load as an **audio effect**: it has a microphone
+Hosts load Humline as an **audio effect**: it has a microphone
 input, makes no sound of its own, and sends MIDI out. So every host needs the
 same two moves - Humline on an audio track (a mixer track in FL) with the mic,
 and its MIDI routed to an instrument on another track. Reaper is the exception:

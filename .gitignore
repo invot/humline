@@ -5,3 +5,4 @@ build/
 /dist/
 .cloud-attachments/
 .freebuff/
+/build-macos/
