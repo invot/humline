@@ -1,7 +1,7 @@
-# Builds the Windows VST3 and standalone app on every push to main and publishes
-# them as the single rolling release "latest". The release sits on one tag, also
-# called "latest", which is moved to the newest commit each time, so no version
-# tags pile up.
+# Builds the Windows VST3, standalone app and installer on every push to main
+# and publishes them as the single rolling release "latest". The release sits on
+# one tag, also called "latest", which is moved to the newest commit each time, so
+# no version tags pile up.
 #
 # The toolchain matches the local build exactly: WinLibs GCC 16.2.0 (UCRT,
 # posix-seh, r3) and JUCE 6.1.6 with ci/juce-6.1.6-mingw.patch, both pinned by
@@ -94,13 +94,29 @@ jobs:
           ./build/HumlineTests.exe
           ./build/HumlineSmoke.exe
 
+      - name: Ensure Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe",
+                                "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+                  Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe",
+                                  "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+          }
+          if (-not $iscc) { throw "ISCC.exe not found" }
+          "ISCC=$($iscc.FullName)" >> $env:GITHUB_ENV
+
       - name: Package
         run: |
           set -euo pipefail
           out=build/Humline_artefacts/Release
           mkdir -p dist
-          cp "$out/Standalone/Humline.exe" dist/Humline-Standalone-Windows.exe
           (cd "$out/VST3" && 7z a -tzip -bso0 "$GITHUB_WORKSPACE/dist/Humline-VST3-Windows.zip" Humline.vst3)
+          iscc="$(cygpath -u "$ISCC")"
+          "$iscc" installer/humline.iss
           ls -la dist
 
       - name: Publish the "latest" release
@@ -112,8 +128,8 @@ jobs:
           {
             echo "Built automatically from \`$short\` on \`main\`: $(git log -1 --format=%s)"
             echo
-            echo "- **Humline-VST3-Windows.zip**: unzip and copy \`Humline.vst3\` to \`C:\\Program Files\\Common Files\\VST3\\\`, then rescan in your DAW."
-            echo "- **Humline-Standalone-Windows.exe**: the standalone app; runs without a DAW."
+            echo "- **Humline-Setup-Windows.exe**: installs the standalone app and \`Humline.vst3\` into \`C:\Program Files\Common Files\VST3\`."
+            echo "- **Humline-VST3-Windows.zip**: the VST3 bundle on its own; unzip into \`C:\Program Files\Common Files\VST3\`."
             echo
             echo "This release is replaced on every push to \`main\`."
           } > notes.md
@@ -126,5 +142,5 @@ jobs:
             --title "latest" \
             --notes-file notes.md \
             --latest \
-            dist/Humline-Standalone-Windows.exe \
+            dist/Humline-Setup-Windows.exe \
             dist/Humline-VST3-Windows.zip

@@ -174,8 +174,8 @@ the PNGs it writes (all but `key-empty.png`) into `docs/screenshots/`.
 
 ## Download
 
-Every push to `main` builds the Windows VST3 and standalone app and publishes
-them as the [**latest**](https://github.com/invot/humline/releases/tag/latest)
+Every push to `main` builds the Windows VST3, standalone app and an installer,
+and publishes them as the [**latest**](https://github.com/invot/humline/releases/tag/latest)
 release, replacing the previous build (see
 [`.github/workflows/release.yml`](.github/workflows/release.yml)). The build
 uses the same MinGW toolchain and patched JUCE 6.1.6 as below, and only

@@ -2,5 +2,6 @@
 build/
 *.exe
 *.zip
+/dist/
 .cloud-attachments/
 .freebuff/
